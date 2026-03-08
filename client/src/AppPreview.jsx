@@ -1467,7 +1467,7 @@ function Login({ onLogin }) {
             background:"var(--accent-green)", boxShadow:"0 0 6px rgba(16,185,129,.6)" }}/>
           <span style={{ fontSize:10, color:"var(--text-muted)", letterSpacing:".04em" }}>
             Chiffrement TLS · Hébergé en Suisse ·{" "}
-            <span style={{ color:"var(--accent-cyan)", fontWeight:600 }}>WIN WIN Finance Group</span>
+            <span style={{ color:"var(--accent-cyan)", fontWeight:600 }}>Neukomm Group</span>
           </span>
         </div>
       </div>
