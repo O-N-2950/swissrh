@@ -34,7 +34,7 @@ export function SalaryCalc() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-void)' }}>
-      <Topbar title="Calculateur de salaire" subtitle="Taux 2025 officiels — Swissdec 5.0 conforme"
+      <Topbar title="Calculateur de salaire" subtitle="Taux officiels 2025 — AVS/AC/LPP/LAA"
         actions={
           <div className="tab-group">
             <button className={`tab-btn${!showER ? ' active' : ''}`} onClick={() => setShowER(false)}>Employé</button>

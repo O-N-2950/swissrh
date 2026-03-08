@@ -31,16 +31,19 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 
-import { migrateOnStart }        from './db/migrate.js';
-import { startPoolKeepalive }    from './db/pool.js';
+import { migrateOnStart }           from './db/migrate.js';
+import { migrateSecurityPatches }   from './db/migrate-security.js';
+import { startPoolKeepalive }       from './db/pool.js';
 import { startupCheck, startPeriodicMonitoring } from './monitoring/crash-monitor.js';
-import { monitoringRouter }      from './monitoring/routes.js';
-import { authRouter }            from './auth/routes.js';
+import { monitoringRouter }         from './monitoring/routes.js';
+import { authRouter }               from './auth/routes.js';
 import { requireAuth, requireAdmin } from './auth/middleware.js';
-import { employeesRouter }       from './api/employees.js';
-import { salaryRouter }          from './api/salary.js';
-import { reportsRouter }         from './api/reports.js';
-import { companyRouter }         from './api/company.js';
+import { employeesRouter }          from './api/employees.js';
+import { salaryRouter }             from './api/salary.js';
+import { reportsRouter }            from './api/reports.js';
+import { companyRouter }            from './api/company.js';
+import { exportRouter }             from './api/exports.js';
+import { gdprRouter }               from './api/gdpr.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -73,6 +76,8 @@ app.use('/api/employees',  requireAuth, employeesRouter);
 app.use('/api/salary',     requireAuth, salaryRouter);
 app.use('/api/reports',    requireAuth, reportsRouter);
 app.use('/api/company',    requireAuth, companyRouter);
+app.use('/api/exports',    requireAuth, exportRouter);   // exports sécurisés (CRITIQUE 5)
+app.use('/api/gdpr',       requireAuth, gdprRouter);     // nLPD (CRITIQUE 7)
 
 // ===== STATIC (production) =====
 if (process.env.NODE_ENV === 'production') {
@@ -107,7 +112,20 @@ async function start() {
   if (process.env.DATABASE_URL) {
     // Auto-migrate at startup
     try {
-      await migrateOnStart();
+      // ── Vérification variables d'environnement critiques ──────────────────
+  const missingEnv: string[] = [];
+  if (!process.env.JWT_SECRET_KEY)  missingEnv.push('JWT_SECRET_KEY');
+  if (!process.env.ENCRYPTION_KEY)  missingEnv.push('ENCRYPTION_KEY');
+  if (!process.env.DATABASE_URL)    missingEnv.push('DATABASE_URL');
+  if (missingEnv.length && process.env.NODE_ENV === 'production') {
+    console.error('🔴 [STARTUP] Variables manquantes en PROD:', missingEnv.join(', '));
+    process.exit(1);
+  } else if (missingEnv.length) {
+    console.warn('⚠️  [STARTUP] Variables manquantes (dev mode):', missingEnv.join(', '));
+  }
+
+  await migrateOnStart();
+  await migrateSecurityPatches();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);

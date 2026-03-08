@@ -891,7 +891,7 @@ function SalaryCalc() {
 
   return (
     <div style={{ flex:1, overflowY:"auto", paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Calculateur de salaire" sub="Taux 2025 · Swissdec 5.0"/>
+      <Topbar title="Calculateur de salaire" sub="Taux officiels 2025"/>
       <div style={{ padding:p, display:"flex", flexDirection:"column", gap:14 }}>
         <div className="gcalc">
 
@@ -1277,9 +1277,9 @@ export default function App() {
     salary:    <SalaryCalc/>,
     absences:  <Absences/>,
     time:      <TimeTracking/>,
-    payroll:   <Placeholder icon="💳" title="Module Paie"     desc="Bulletins de salaire PDF, validation mensuelle, export Swissdec."/>,
+    payroll:   <Placeholder icon="💳" title="Module Paie"     desc="Bulletins de salaire PDF, validation mensuelle, export CSV/PDF."/>,
     vacations: <Placeholder icon="🏖" title="Soldes Vacances" desc="Gestion des soldes, report max 5j, pro-rata entrée/sortie."/>,
-    reports:   <Placeholder icon="📊" title="Rapports"        desc="Lohnausweis 15 cases, IS cantonaux, export ELM Swissdec 5.0."/>,
+    reports:   <Placeholder icon="📊" title="Rapports"        desc="Lohnausweis 15 cases, IS cantonaux, export CSV compatible (format ELM non certifié)."/>,
     documents: <Placeholder icon="📄" title="Documents RH"    desc="Contrats, attestations CO 330a, certificats de travail."/>,
     settings:  <Placeholder icon="⚙" title="Paramètres"      desc="Configuration entreprise, taux d'assurance, jours fériés."/>,
   };
