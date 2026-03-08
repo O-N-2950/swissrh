@@ -236,72 +236,35 @@ function hToHMM(h) {
 
 /* ═══ SALARY ENGINE ════════════════════════════════════ */
 
-/* ═══ SWISSRH LOGO SVG ══════════════════════════════════
-   Couleurs exactes extraites du logo officiel :
-   Rouge  : #B32D26  |  Bleu : #366389
-═══════════════════════════════════════════════════════ */
+/* ═══ SWISSRH LOGO — IMAGE OFFICIELLE ══════════════════
+   Logo réel intégré en base64 WebP (7kb)
+   Fond gris texturé conservé — s'affiche sur fond light WinWin V2
+══════════════════════════════════════════════════════ */
 
-function SwissRHLogo({ height = 36, dark = false }) {
-  const R = "#B32D26", B = "#366389", sub = dark ? "rgba(255,255,255,.45)" : "#8fa3b1";
-  const h = height, w = h * 3.6;
-  const s = h / 100; // scale factor
+const LOGO_B64 = "data:image/webp;base64,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";
 
+function SwissRHLogo({ height = 36 }) {
+  // Ratio original: 1024x559 ≈ 1.83:1
+  const width = Math.round(height * 1.83);
   return (
-    <svg width={w} height={h} viewBox="0 0 360 100" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink:0, display:"block" }}>
-      {/* ── ÉCUSSON ── */}
-      <path d="M14 8 L66 8 Q72 8 72 16 L72 58 Q72 82 40 96 Q8 82 8 58 L8 16 Q8 8 14 8 Z" fill={R}/>
-      {/* Highlight */}
-      <path d="M14 8 L66 8 Q72 8 72 16 L72 40 Q60 20 40 22 Q20 20 8 40 L8 16 Q8 8 14 8 Z" fill="rgba(255,255,255,.12)"/>
-      {/* Croix suisse */}
-      <rect x="33" y="26" width="14" height="40" rx="2.5" fill="white"/>
-      <rect x="20" y="38" width="40" height="14" rx="2.5" fill="white"/>
-
-      {/* ── SILHOUETTES (bleu, au-dessus de l'écusson) ── */}
-      {/* Personne gauche */}
-      <circle cx="43" cy="10" r="6" fill={B}/>
-      <path d="M34 22 Q43 14 52 22 L54 44 L43 40 L32 44 Z" fill={B}/>
-      {/* Personne droite (plus grande) */}
-      <circle cx="58" cy="5" r="6" fill={B}/>
-      <path d="M49 17 Q58 9 67 17 L69 39 L58 35 L47 39 Z" fill={B}/>
-
-      {/* ── VAGUE BLEUE ── */}
-      <path d="M6 70 Q20 58 38 66 Q52 72 66 60 Q78 50 90 56" stroke={B} strokeWidth="4.5" fill="none" strokeLinecap="round"/>
-      <path d="M4 80 Q20 68 40 76 Q56 84 72 70 Q84 60 94 66" stroke={B} strokeWidth="3" fill="none" strokeLinecap="round" opacity=".5"/>
-
-      {/* ── TEXTE SWISS ── */}
-      <text x="108" y="66"
-        fontFamily="'Arial Black','Arial',sans-serif"
-        fontWeight="900" fontSize="52" fill={R}
-        letterSpacing="-1.5">SWISS</text>
-
-      {/* ── TEXTE RH ── */}
-      <text x="289" y="66"
-        fontFamily="'Arial Black','Arial',sans-serif"
-        fontWeight="900" fontSize="52" fill={B}
-        letterSpacing="-1">RH</text>
-
-      {/* ── TEXTE .CH ── */}
-      <text x="340" y="66"
-        fontFamily="'Arial Black','Arial',sans-serif"
-        fontWeight="900" fontSize="52" fill={dark ? "rgba(255,255,255,.45)" : "#8fa3b1"}
-        letterSpacing="-1">.CH</text>
-
-      {/* ── SOUS-TITRE ── */}
-      <text x="108" y="84"
-        fontFamily="'Arial',sans-serif"
-        fontWeight="400" fontSize="10.5" fill={sub}
-        letterSpacing="2.2">RESSOURCES HUMAINES &amp; SOLUTIONS SUISSES</text>
-    </svg>
+    <img
+      src={LOGO_B64}
+      width={width}
+      height={height}
+      alt="SwissRH.ch — Ressources Humaines & Solutions Suisses"
+      style={{ objectFit:"contain", display:"block", flexShrink:0 }}
+    />
   );
 }
 
-/* Icône seule (sidebar réduite, favicon) */
+/* Icône écusson seul pour sidebar réduite */
 function SwissRHIcon({ size = 32 }) {
   const R = "#B32D26", B = "#366389";
   return (
-    <svg width={size} height={size} viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink:0, display:"block" }}>
+    <svg width={size} height={size} viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink:0, display:"block" }}>
       <path d="M10 8 L70 8 Q76 8 76 16 L76 50 Q76 70 40 78 Q4 70 4 50 L4 16 Q4 8 10 8 Z" fill={R}/>
-      <path d="M10 8 L70 8 Q76 8 76 16 L76 35 Q62 18 40 20 Q18 18 4 35 L4 16 Q4 8 10 8 Z" fill="rgba(255,255,255,.13)"/>
+      <path d="M10 8 L70 8 Q76 8 76 16 L76 35 Q62 18 40 20 Q18 18 4 35 L4 16 Q4 8 10 8 Z" fill="rgba(255,255,255,.15)"/>
       <rect x="32" y="22" width="16" height="38" rx="3" fill="white"/>
       <rect x="21" y="33" width="38" height="16" rx="3" fill="white"/>
       <circle cx="42" cy="8" r="6" fill={B}/>
@@ -505,9 +468,11 @@ function Sidebar({ page, setPage, open, setOpen }) {
             onClick={() => setOpen(false)}>
             <div style={{ width:240, height:"100%", background:"var(--sidebar-bg)", padding:"18px 9px", overflowY:"auto" }}
               onClick={e => e.stopPropagation()} className="au">
-              {/* Logo */}
+              {/* Logo sur fond blanc — sidebar sombre */}
               <div style={{ padding:"4px 6px 16px", borderBottom:"1px solid rgba(255,255,255,.06)", marginBottom:10 }}>
-                <SwissRHLogo height={28} dark/>
+                <div style={{ background:"#fff", borderRadius:8, padding:"6px 8px", display:"inline-flex" }}>
+                  <SwissRHLogo height={24}/>
+                </div>
               </div>
               {NAV.map(n => (
                 <div key={n.id} className={`sbi${page === n.id ? " on" : ""}`}
@@ -549,11 +514,13 @@ function Sidebar({ page, setPage, open, setOpen }) {
       transition:"width .25s cubic-bezier(.16,1,.3,1)" }}>
       {/* Logo */}
       <div style={{ display:"flex", alignItems:"center", justifyContent: col ? "center" : undefined,
-        padding: col ? "14px 0" : "12px 13px 12px",
-        borderBottom:"1px solid rgba(255,255,255,.06)", flexShrink:0, minHeight:60 }}>
+        padding: col ? "12px 0" : "10px 12px",
+        borderBottom:"1px solid rgba(255,255,255,.06)", flexShrink:0, minHeight:56 }}>
         {col
           ? <SwissRHIcon size={30}/>
-          : <SwissRHLogo height={32} dark/>
+          : <div style={{ background:"#fff", borderRadius:8, padding:"5px 8px", display:"inline-flex" }}>
+              <SwissRHLogo height={26}/>
+            </div>
         }
       </div>
       {/* Nav */}
