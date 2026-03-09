@@ -44,6 +44,7 @@ import { reportsRouter }            from './api/reports.js';
 import { companyRouter }            from './api/company.js';
 import { exportRouter }             from './api/exports.js';
 import { gdprRouter }               from './api/gdpr.js';
+import { ssoRouter }                from './auth/sso.js';      // SSO WinWin
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -78,6 +79,7 @@ app.use('/api/reports',    requireAuth, reportsRouter);
 app.use('/api/company',    requireAuth, companyRouter);
 app.use('/api/exports',    requireAuth, exportRouter);   // exports sécurisés (CRITIQUE 5)
 app.use('/api/gdpr',       requireAuth, gdprRouter);     // nLPD (CRITIQUE 7)
+app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
 if (process.env.NODE_ENV === 'production') {

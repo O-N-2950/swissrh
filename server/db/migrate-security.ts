@@ -90,3 +90,28 @@ export async function migrateSecurityPatches(): Promise<void> {
 
   console.log('[MIGRATE] ✅ Patches sécurité 016-020 terminés');
 }
+
+// ── PATCH 021 — SSO nonces (usage unique) ────────────────────────────────
+export async function migrateSso(): Promise<void> {
+  const sql = getSQL();
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS sso_nonces (
+      id         SERIAL PRIMARY KEY,
+      nonce      VARCHAR(64) UNIQUE NOT NULL,
+      email      VARCHAR(255),
+      used_at    TIMESTAMP DEFAULT NOW()
+    )
+  `;
+  // Auto-nettoyage des nonces de plus de 10 min (cron ou trigger)
+  await sql`CREATE INDEX IF NOT EXISTS idx_sso_nonces_used_at ON sso_nonces (used_at)`;
+
+  // Colonne sso_provider sur users
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_provider VARCHAR(50)`;
+
+  // Colonne winwin_client_id sur companies (lien WinWin ↔ SwissRH)
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS winwin_client_id INTEGER`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_companies_winwin_client ON companies (winwin_client_id)`;
+
+  console.log('[MIGRATE] ✅ 021 SSO nonces + companies.winwin_client_id');
+}
