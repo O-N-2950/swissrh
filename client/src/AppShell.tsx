@@ -508,360 +508,6 @@ function Sidebar({ page, setPage, open, setOpen }) {
 
 /* ═══ DATA ══════════════════════════════════════════════ */
 
-const EMPLOYEES = [
-  { id:1, name:"Dupont Marc",    dept:"Production", ct:"CDI",    pm:"CH", sal:5800, rt:100, age:38, hire:"2019-03-01" },
-  { id:2, name:"Müller Sophie",  dept:"Admin",      ct:"CDI",    pm:"B",  sal:4200, rt:80,  age:29, hire:"2021-06-15", exp:"2025-09-30" },
-  { id:3, name:"García Carlos",  dept:"Logistique", ct:"CDD",    pm:"G",  sal:3900, rt:100, age:34, hire:"2024-01-01", exp:"2025-06-30" },
-  { id:4, name:"Schneider Anna", dept:"RH",         ct:"CDI",    pm:"C",  sal:7200, rt:100, age:45, hire:"2015-11-01" },
-  { id:5, name:"Rossi Pietro",   dept:"IT",         ct:"CDI",    pm:"B",  sal:8500, rt:100, age:41, hire:"2022-02-28", exp:"2026-02-28" },
-  { id:6, name:"Favre Lucie",    dept:"Production", ct:"Horaire",pm:"CH", sal:28.5, rt:100, age:24, hire:"2023-08-01" },
-  { id:7, name:"Weber Thomas",   dept:"Admin",      ct:"CDI",    pm:"CH", sal:6100, rt:60,  age:52, hire:"2010-04-01" },
-  { id:8, name:"Nguyen Linh",    dept:"IT",         ct:"CDI",    pm:"L",  sal:9200, rt:100, age:31, hire:"2023-11-15", exp:"2025-11-15" },
-];
-
-const PAYROLL_DATA = ["Jan","Fév","Mar","Avr","Mai","Jun"].map((m, i) => ({
-  m, brut: 38200 + Math.round(Math.sin(i * .9) * 800),
-  net:     29300 + Math.round(Math.sin(i * .9) * 600),
-}));
-
-const PIE_DATA = [
-  { name:"AVS/AI/APG", v:3200, c:"#3176A6" },
-  { name:"LPP",        v:1800, c:"#8b5cf6" },
-  { name:"AC/ACE",     v:430,  c:"#10b981" },
-  { name:"LAA",        v:490,  c:"#f59e0b" },
-  { name:"IJM",        v:290,  c:"#ef4444" },
-];
-
-const ABSENCES = [
-  { id:1, emp:"Dupont Marc",    type:"Vacances",   start:"03 mars", end:"07 mars", days:5,  status:"approved" },
-  { id:2, emp:"Müller Sophie",  type:"Maladie",    start:"10 fév",  end:"12 fév",  days:3,  status:"approved", cert:true },
-  { id:3, emp:"García Carlos",  type:"Vacances",   start:"24 mars", end:"28 mars", days:5,  status:"pending" },
-  { id:4, emp:"Schneider Anna", type:"Famille",    start:"20 fév",  end:"20 fév",  days:1,  status:"approved" },
-  { id:5, emp:"Rossi Pietro",   type:"Accident NP",start:"15 jan",  end:"29 jan",  days:11, status:"approved", cert:true },
-  { id:6, emp:"Favre Lucie",    type:"Vacances",   start:"14 avr",  end:"18 avr",  days:5,  status:"pending" },
-];
-
-const VAC = [
-  { n:"Dupont Marc",    ent:25, taken:8,  bal:17 },
-  { n:"Müller Sophie",  ent:20, taken:5,  bal:15 },
-  { n:"García Carlos",  ent:25, taken:12, bal:13 },
-  { n:"Schneider Anna", ent:30, taken:15, bal:15 },
-  { n:"Rossi Pietro",   ent:25, taken:3,  bal:22 },
-  { n:"Favre Lucie",    ent:25, taken:6,  bal:19 },
-  { n:"Weber Thomas",   ent:25, taken:10, bal:15 },
-  { n:"Nguyen Linh",    ent:25, taken:2,  bal:23 },
-];
-
-const TIME_W = [
-  { d:"Lun 03", arr:"08:00", dep:"17:00", worked:8.25, ot:.25 },
-  { d:"Mar 04", arr:"08:15", dep:"18:00", worked:9.00, ot:1.0 },
-  { d:"Mer 05", arr:"07:45", dep:"17:00", worked:8.50, ot:.50 },
-  { d:"Jeu 06", arr:"08:00", dep:"17:30", worked:8.83, ot:.83 },
-  { d:"Ven 07", arr:"08:00", dep:"17:00", worked:8.25, ot:.25 },
-];
-
-/* ═══ PAGE: DASHBOARD ═══════════════════════════════════ */
-
-const ChartTip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{ background:"var(--surf)", border:"1px solid var(--b2)", borderRadius:8,
-      padding:"8px 12px", fontFamily:"var(--mono)", fontSize:11 }}>
-      <div style={{ fontWeight:700, marginBottom:4, fontFamily:"Outfit,sans-serif" }}>{label}</div>
-      {payload.map(p => (
-        <div key={p.dataKey} style={{ color:p.color }}>
-          {p.name === "brut" ? "Brut" : "Net"}: CHF {fmt(p.value, 0)}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-function Dashboard() {
-  const w = useW();
-  const p = w < 600 ? "14px 12px" : "20px 26px";
-  const [hp, setHp] = useState(null);
-
-  return (
-    <div style={{ flex:1, overflowY:"auto", paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Dashboard RH" sub="Mars 2025 · 8 collaborateurs · JU"
-        actions={<>
-          <button className="btn btn-g" style={{ fontSize:11 }}>📤 Export</button>
-          <button className="btn btn-p" style={{ fontSize:11 }}>▶ Lancer la paie</button>
-        </>}
-      />
-      <div style={{ padding:p, display:"flex", flexDirection:"column", gap:14 }}>
-
-        {/* ── KPIs ── */}
-        <div className="g4 stg">
-          <KpiCard label="Masse salariale brute" value={38200} sub="mars 2025"   color="var(--blue)"   icon="💰" trend={2.1} delay={0}/>
-          <KpiCard label="Net total versé"        value={29300} sub="ce mois"    color="var(--green)"  icon="✅" trend={1.8} delay={60}/>
-          <KpiCard label="Charges patronales"     value={8800}  sub="≈ 23% brut" color="var(--amber)"  icon="🏛" delay={120}/>
-          <KpiCard label="Collaborateurs"         value={8}     sub="1 alerte permis" isNum color="var(--purple)" icon="👥" delay={180}/>
-        </div>
-
-        {/* ── Charts ── */}
-        <div className="g21">
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18 }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>📈 Masse salariale 2025</div>
-            <div style={{ fontSize:10, color:"var(--tm)", marginBottom:12 }}>Brut vs Net — CHF/mois</div>
-            <ResponsiveContainer width="100%" height={w < 480 ? 150 : 190}>
-              <AreaChart data={PAYROLL_DATA} margin={{ left:-22, right:4 }}>
-                <defs>
-                  <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3176A6" stopOpacity=".18"/>
-                    <stop offset="100%" stopColor="#3176A6" stopOpacity="0"/>
-                  </linearGradient>
-                  <linearGradient id="gN" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity=".15"/>
-                    <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="m" tick={{ fontSize:11, fill:"var(--tm)" }} axisLine={false} tickLine={false}/>
-                <YAxis tick={{ fontSize:10, fill:"var(--tm)" }} axisLine={false} tickLine={false} tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
-                <Tooltip content={<ChartTip/>}/>
-                <Area type="monotone" dataKey="brut" stroke="#3176A6" strokeWidth={2} fill="url(#gB)"/>
-                <Area type="monotone" dataKey="net"  stroke="#10b981" strokeWidth={2} fill="url(#gN)"/>
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:".06s" }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>🧮 Déductions employé</div>
-            <div style={{ fontSize:10, color:"var(--tm)", marginBottom:8 }}>Mars 2025</div>
-            <ResponsiveContainer width="100%" height={w < 480 ? 110 : 130}>
-              <PieChart>
-                <Pie data={PIE_DATA} cx="50%" cy="50%"
-                  innerRadius={w < 480 ? 28 : 34} outerRadius={w < 480 ? 46 : 56}
-                  dataKey="v" paddingAngle={2}
-                  onMouseEnter={(_,i) => setHp(i)} onMouseLeave={() => setHp(null)}>
-                  {PIE_DATA.map((e, i) => (
-                    <Cell key={i} fill={e.c} opacity={hp === null || hp === i ? 1 : .4}
-                      strokeWidth={hp === i ? 2 : 0} stroke="var(--surf)"/>
-                  ))}
-                </Pie>
-                <Tooltip formatter={v => [`CHF ${fmt(v, 0)}`]}
-                  contentStyle={{ background:"var(--surf)", border:"1px solid var(--b2)", borderRadius:8, fontFamily:"var(--mono)", fontSize:11 }}/>
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ display:"flex", flexDirection:"column", gap:5, marginTop:4 }}>
-              {PIE_DATA.map((d, i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:11 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ width:7, height:7, borderRadius:2, background:d.c, flexShrink:0 }}/>
-                    <span style={{ color:"var(--t2)" }}>{d.name}</span>
-                  </div>
-                  <span className="mono" style={{ fontWeight:700, fontSize:11 }}>CHF {fmt(d.v, 0)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Bottom row ── */}
-        <div className="g3">
-          {/* Alertes */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:".10s" }}>
-            <SH>🔔 Alertes <span className="badge s-rejected" style={{ marginLeft:5 }}>4</span></SH>
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {[
-                { i:"🪪", m:"Müller Sophie — Permis B expire dans 28j", c:"var(--amber)" },
-                { i:"📋", m:"García Carlos — Congés en attente (5j)",   c:"var(--blue)" },
-                { i:"🏥", m:"Rossi Pietro — Certificat manquant",        c:"var(--red)" },
-                { i:"🏖", m:"Favre Lucie — Solde vacances > 20j",        c:"var(--amber)" },
-              ].map((a, i) => (
-                <div key={i} style={{ display:"flex", gap:8, padding:"8px 10px",
-                  background:`${a.c}0d`, borderRadius:7, border:`1px solid ${a.c}22` }}>
-                  <span style={{ fontSize:12, flexShrink:0, marginTop:1 }}>{a.i}</span>
-                  <span style={{ fontSize:11, color:"var(--t2)", lineHeight:1.4 }}>{a.m}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Absences récentes */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:".15s" }}>
-            <SH>🗓 Absences récentes</SH>
-            {ABSENCES.slice(0, 4).map((a, i) => (
-              <div key={i} className="row" style={{ display:"flex", justifyContent:"space-between",
-                alignItems:"center", padding:"8px 4px", gap:8 }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                    {a.emp.split(" ")[0]}
-                  </div>
-                  <div style={{ fontSize:10, color:"var(--tm)" }}>{a.type} · {a.days}j</div>
-                </div>
-                <StatusBadge s={a.status}/>
-              </div>
-            ))}
-          </div>
-
-          {/* Soldes */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:".20s" }}>
-            <SH>🏖 Soldes vacances</SH>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {VAC.slice(0, 5).map((v, i) => (
-                <div key={i}>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:3 }}>
-                    <span style={{ fontWeight:600 }}>{v.n.split(" ")[0]}</span>
-                    <span className="mono" style={{ color: v.bal < 5 ? "var(--red)" : "var(--blue)", fontWeight:700 }}>
-                      {v.bal}j
-                    </span>
-                  </div>
-                  <ProgBar val={v.taken} max={v.ent}/>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ═══ PAGE: EMPLOYEES ═══════════════════════════════════ */
-
-function Employees() {
-  const w = useW();
-  const [q, setQ]   = useState("");
-  const [sel, setSel] = useState(null);
-  const list = EMPLOYEES.filter(e => e.name.toLowerCase().includes(q.toLowerCase()));
-  const p = w < 600 ? "14px 12px" : "18px 26px";
-
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-      <Topbar title="Collaborateurs" sub={`${list.length} / ${EMPLOYEES.length} affiché(s)`}
-        actions={<button className="btn btn-p" style={{ fontSize:11 }}>+ Nouveau</button>}/>
-      <div style={{ flex:1, overflowY:"auto", padding:p, paddingBottom: w < 768 ? 80 : undefined }}>
-
-        <div style={{ position:"relative", marginBottom:12 }}>
-          <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"var(--tm)" }}>🔍</span>
-          <input className="inp" placeholder="Rechercher un collaborateur…" value={q}
-            onChange={e => setQ(e.target.value)} style={{ paddingLeft:34 }}/>
-        </div>
-
-        {/* Mobile: cards */}
-        {w < 700 ? (
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }} className="stg">
-            {list.map(emp => (
-              <div key={emp.id} className="card" style={{ padding:14, cursor:"pointer" }}
-                onClick={() => setSel(sel?.id === emp.id ? null : emp)}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <div style={{ width:38, height:38, borderRadius:"50%", background:"var(--blued)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:13, fontWeight:900, color:"var(--blue)", flexShrink:0 }}>
-                    {emp.name.split(" ").map(n => n[0]).join("")}
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:700, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{emp.name}</div>
-                    <div style={{ fontSize:11, color:"var(--tm)" }}>{emp.dept} · {emp.ct}</div>
-                  </div>
-                  <span className={`badge p-${emp.pm}`}>{emp.pm}</span>
-                </div>
-                <div className="g2" style={{ gap:8 }}>
-                  <div style={{ background:"var(--surf2)", borderRadius:7, padding:"8px 10px" }}>
-                    <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"var(--tm)", letterSpacing:".04em" }}>Salaire</div>
-                    <div className="mono" style={{ fontSize: w < 380 ? 15 : 17, fontWeight:900, color:"var(--blue)", marginTop:3 }}>
-                      {emp.ct === "Horaire" ? `${emp.sal}/h` : fmt(emp.sal, 0)}
-                      <span style={{ fontSize:10, color:"var(--tm)", fontWeight:400 }}> CHF</span>
-                    </div>
-                  </div>
-                  <div style={{ background:"var(--surf2)", borderRadius:7, padding:"8px 10px" }}>
-                    <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"var(--tm)", letterSpacing:".04em" }}>Activité</div>
-                    <div style={{ marginTop:6, marginBottom:3 }}><ProgBar val={emp.rt} max={100}/></div>
-                    <div className="mono" style={{ fontSize:14, fontWeight:800, color:"var(--blue)" }}>{emp.rt}%</div>
-                  </div>
-                </div>
-                {emp.exp && (
-                  <div style={{ marginTop:8, padding:"6px 10px", background:"var(--amberd)",
-                    borderRadius:6, fontSize:10, color:"var(--amber)", fontWeight:700 }}>
-                    ⚠ Permis expire le {emp.exp}
-                  </div>
-                )}
-                {sel?.id === emp.id && (
-                  <div className="g2" style={{ marginTop:12, paddingTop:12, borderTop:"1px solid var(--b1)", gap:8 }}>
-                    {[["Âge", `${emp.age} ans`], ["Embauché", emp.hire],
-                      ["Statut", "Actif"], ["Département", emp.dept]].map(([k, v]) => (
-                      <div key={k} style={{ background:"var(--blued)", padding:"8px 10px", borderRadius:7 }}>
-                        <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"var(--tm)", letterSpacing:".04em" }}>{k}</div>
-                        <div style={{ fontSize:12, fontWeight:700, marginTop:3 }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          /* Desktop: table */
-          <div className="card">
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 80px 120px 100px",
-              gap:10, padding:"9px 16px", background:"var(--surf2)",
-              borderBottom:"1px solid var(--b1)", borderRadius:"var(--r) var(--r) 0 0" }}>
-              {["Collaborateur", "Département", "Contrat", "Permis", "Salaire CHF", "Activité"].map(h => (
-                <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:".05em", textTransform:"uppercase", color:"var(--tm)" }}>{h}</div>
-              ))}
-            </div>
-            {list.map((emp, i) => (
-              <div key={emp.id} className="row" style={{ display:"grid",
-                gridTemplateColumns:"2fr 1fr 1fr 80px 120px 100px",
-                gap:10, padding:"12px 16px", alignItems:"center", cursor:"pointer",
-                animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i * 30}ms both` }}
-                onClick={() => setSel(sel?.id === emp.id ? null : emp)}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:32, height:32, borderRadius:"50%", background:"var(--blued)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:11, fontWeight:900, color:"var(--blue)", flexShrink:0 }}>
-                    {emp.name.split(" ").map(n => n[0]).join("")}
-                  </div>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{emp.name}</div>
-                    {emp.exp && <div style={{ fontSize:9, color:"var(--amber)" }}>⚠ {emp.exp}</div>}
-                  </div>
-                </div>
-                <div style={{ fontSize:12, color:"var(--t2)" }}>{emp.dept}</div>
-                <span className="badge" style={{ background:"var(--blued)", color:"var(--blue)" }}>{emp.ct}</span>
-                <span className={`badge p-${emp.pm}`}>{emp.pm}</span>
-                <div className="mono" style={{ fontSize:13, fontWeight:800 }}>
-                  {emp.ct === "Horaire" ? `${emp.sal}/h` : fmt(emp.sal, 0)}
-                </div>
-                <div>
-                  <ProgBar val={emp.rt} max={100}/>
-                  <div style={{ fontSize:10, color:"var(--tm)", marginTop:2 }}>{emp.rt}%</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {sel && w >= 700 && (
-          <div className="card" style={{ marginTop:12, padding:18,
-            animation:"scaleIn .25s cubic-bezier(.16,1,.3,1)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:14 }}>
-              <div style={{ fontWeight:800, fontSize:14 }}>{sel.name}</div>
-              <button onClick={() => setSel(null)} style={{ background:"none", border:"none",
-                cursor:"pointer", fontSize:18, color:"var(--tm)", lineHeight:1 }}>×</button>
-            </div>
-            <div className="g4" style={{ gap:10 }}>
-              {[["Département", sel.dept], ["Contrat", sel.ct], ["Permis", sel.pm],
-                ["Taux activité", `${sel.rt}%`], ["Âge", `${sel.age} ans`], ["Embauché", sel.hire],
-                ["Salaire", sel.ct === "Horaire" ? `${sel.sal} CHF/h` : `${fmt(sel.sal, 0)} CHF/m`],
-                ["Statut", "Actif"]
-              ].map(([k, v]) => (
-                <div key={k} style={{ padding:"10px 12px", background:"var(--surf2)", borderRadius:8 }}>
-                  <div style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:".04em", color:"var(--tm)", marginBottom:3 }}>{k}</div>
-                  <div style={{ fontSize:13, fontWeight:700 }}>{v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ═══ PAGE: SALARY CALC ══════════════════════════════════ */
 
 function SalaryCalc() {
   const w = useW();
@@ -1024,69 +670,244 @@ function SalaryCalc() {
 
 /* ═══ PAGE: ABSENCES ════════════════════════════════════ */
 
-function Absences() {
-  const w  = useW();
-  const [f, setF] = useState("all");
-  const list = ABSENCES.filter(a => f === "all" || a.status === f);
-  const p  = w < 600 ? "14px 12px" : "18px 26px";
-  const COLORS = { "Vacances":"#10b981","Maladie":"#ef4444","Accident NP":"#f59e0b","Famille":"#3176A6","Accident P":"#ef4444" };
+
+/* ══════════════════════════════════════════════════════════
+   API CLIENT
+══════════════════════════════════════════════════════════ */
+const API_BASE = '/api';
+const apiFetch = async (url: string, method = 'GET', body?: any) => {
+  const r = await fetch(API_BASE + url, {
+    method, credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+};
+
+/* ══════════════════════════════════════════════════════════
+   HOOK: useApi — chargement API générique
+══════════════════════════════════════════════════════════ */
+function useApi(fetchFn, deps = []) {
+  const [data, setData]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const load = () => {
+    setLoading(true); setError(null);
+    fetchFn().then(d => { setData(d); setLoading(false); })
+             .catch(e => { setError(e.message); setLoading(false); });
+  };
+  useEffect(load, deps);
+  return { data, loading, error, reload: load };
+}
+
+function ApiState({ loading, error, children }) {
+  if (loading) return (
+    <div style={{ padding:40, display:'flex', justifyContent:'center' }}>
+      <Spinner size={28}/>
+    </div>
+  );
+  if (error) return (
+    <div style={{ margin:20, padding:'12px 16px', background:'var(--redd)',
+      border:'1px solid rgba(239,68,68,.2)', borderRadius:8, fontSize:12, color:'var(--red)' }}>
+      ⚠ {error}
+    </div>
+  );
+  return children;
+}
+
+const fDate = (d) => d ? new Date(d).toLocaleDateString('fr-CH', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—';
+const now = new Date();
+const YEAR = now.getFullYear();
+const MONTH = now.getMonth() + 1;
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: DASHBOARD (câblé API réelle)
+══════════════════════════════════════════════════════════ */
+
+const ChartTip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background:'var(--surf)', border:'1px solid var(--b2)', borderRadius:8,
+      padding:'8px 12px', fontFamily:'var(--mono)', fontSize:11 }}>
+      <div style={{ fontWeight:700, marginBottom:4, fontFamily:'Outfit,sans-serif' }}>{label}</div>
+      {payload.map(p => (
+        <div key={p.dataKey} style={{ color:p.color }}>
+          {p.dataKey === 'brut' ? 'Brut' : 'Net'}: CHF {fmt(p.value, 0)}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+function Dashboard() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '20px 26px';
+  const [hp, setHp] = useState(null);
+
+  const { data: kpi, loading: kLoading } = useApi(() => apiFetch(`/reports/dashboard?year=${YEAR}&month=${MONTH}`));
+  const { data: alertsD } = useApi(() => apiFetch('/absences/alerts/all'));
+  const { data: vacD }    = useApi(() => apiFetch(`/absences/vacation/balances?year=${YEAR}`));
+  const { data: absD }    = useApi(() => apiFetch('/absences?limit=4'));
+
+  const kd = kpi?.payroll;
+  const employees = kpi?.employees;
+
+  const pieData = kd ? [
+    { name:'AVS/AI/APG', v: Math.round((kd.totalGross * 0.0853) / (kpi.employees?.total||1)), c:'#3176A6' },
+    { name:'LPP',        v: Math.round((kd.totalGross * 0.050)  / (kpi.employees?.total||1)), c:'#8b5cf6' },
+    { name:'AC/ACE',     v: Math.round((kd.totalGross * 0.011)  / (kpi.employees?.total||1)), c:'#10b981' },
+    { name:'LAA NP',     v: Math.round((kd.totalGross * 0.013)  / (kpi.employees?.total||1)), c:'#f59e0b' },
+    { name:'IJM',        v: Math.round((kd.totalGross * 0.0075) / (kpi.employees?.total||1)), c:'#ef4444' },
+  ] : [];
+
+  const alerts = alertsD?.alerts || [];
+  const vac    = (vacD?.balances || []).slice(0, 5);
+  const abs    = (absD?.absences || []).slice(0, 4);
 
   return (
-    <div style={{ flex:1, overflowY:"auto", paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Gestion des absences" sub="Congés · Maladie · Accidents · APG"
-        actions={<button className="btn btn-p" style={{ fontSize:11 }}>+ Nouvelle</button>}/>
-      <div style={{ padding:p, display:"flex", flexDirection:"column", gap:14 }}>
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Dashboard RH"
+        sub={kLoading ? 'Chargement…' : `${new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})} · ${employees?.total ?? '…'} collaborateurs`}
+        actions={<>
+          <button className="btn btn-g" style={{ fontSize:11 }}
+            onClick={() => window.open('/api/exports/employees.csv','_blank')}>📤 Export</button>
+        </>}
+      />
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
 
-        <div className="tabs">
-          {[["all","Tout"],["pending",`En attente (${ABSENCES.filter(a=>a.status==="pending").length})`],
-            ["approved","Approuvé"],["rejected","Refusé"]].map(([val, lbl]) => (
-            <button key={val} className={`tab${f === val ? " on" : ""}`} onClick={() => setF(val)}>{lbl}</button>
-          ))}
+        {/* KPIs */}
+        <div className="g4 stg">
+          <KpiCard label="Masse salariale brute" value={kd?.totalGross ?? 0}
+            sub={`${new Date().toLocaleString('fr-CH',{month:'long'})}`}
+            color="var(--blue)" icon="💰" trend={parseFloat(kd?.trendVsLastMonth ?? '0')} delay={0}/>
+          <KpiCard label="Net total versé" value={kd?.totalNet ?? 0}
+            sub="ce mois" color="var(--green)" icon="✅" delay={60}/>
+          <KpiCard label="Charges patronales" value={kd?.totalEmployerCost ?? 0}
+            sub="≈ 23% brut" color="var(--amber)" icon="🏛" delay={120}/>
+          <KpiCard label="Collaborateurs" value={employees?.total ?? 0}
+            sub={employees?.permitsExpiring ? `${employees.permitsExpiring} alerte(s) permis` : 'RAS'}
+            isNum color="var(--purple)" icon="👥" delay={180}/>
         </div>
 
-        <div className="gabs">
-          <div className="card stg">
-            {list.map((a, i) => (
-              <div key={i} className="row" style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px" }}>
-                <div style={{ width:3, alignSelf:"stretch", borderRadius:2, flexShrink:0,
-                  background: COLORS[a.type] || "var(--blue)" }}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:2 }}>
-                    <span style={{ fontWeight:700, fontSize:13 }}>{a.emp}</span>
-                    <span className="badge" style={{ background:(COLORS[a.type]||"var(--blue)")+"1a",
-                      color:COLORS[a.type]||"var(--blue)", fontSize:8 }}>{a.type}</span>
-                    {a.cert && <span className="badge s-approved" style={{ fontSize:8 }}>Cert ✓</span>}
-                  </div>
-                  <div style={{ fontSize:10, color:"var(--tm)" }}>
-                    {a.start} → {a.end} · <strong>{a.days}j</strong>
-                  </div>
+        {/* Charts */}
+        <div className="g21">
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18 }}>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>📈 Masse salariale {YEAR}</div>
+            <div style={{ fontSize:10, color:'var(--tm)', marginBottom:12 }}>Brut vs Net · CHF/mois</div>
+            {kLoading ? <Spinner/> : (
+              <ResponsiveContainer width="100%" height={w < 480 ? 150 : 190}>
+                <AreaChart data={[]} margin={{ left:-22, right:4 }}>
+                  <defs>
+                    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3176A6" stopOpacity=".18"/>
+                      <stop offset="100%" stopColor="#3176A6" stopOpacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="gN" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity=".15"/>
+                      <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="m" tick={{ fontSize:11, fill:'var(--tm)' }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fontSize:10, fill:'var(--tm)' }} axisLine={false} tickLine={false}
+                    tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
+                  <Tooltip content={<ChartTip/>}/>
+                  <Area type="monotone" dataKey="brut" stroke="#3176A6" strokeWidth={2} fill="url(#gB)"/>
+                  <Area type="monotone" dataKey="net"  stroke="#10b981" strokeWidth={2} fill="url(#gN)"/>
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+            <div style={{ fontSize:10, color:'var(--tm)', textAlign:'center', marginTop:4 }}>
+              Données historiques disponibles après 1er mois de paie complet
+            </div>
+          </div>
+
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.06s' }}>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>🧮 Déductions employé</div>
+            <div style={{ fontSize:10, color:'var(--tm)', marginBottom:8 }}>Estimation mois courant</div>
+            {pieData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={w < 480 ? 110 : 130}>
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%"
+                      innerRadius={w < 480 ? 28 : 34} outerRadius={w < 480 ? 46 : 56}
+                      dataKey="v" paddingAngle={2}
+                      onMouseEnter={(_,i) => setHp(i)} onMouseLeave={() => setHp(null)}>
+                      {pieData.map((e, i) => (
+                        <Cell key={i} fill={e.c} opacity={hp === null || hp === i ? 1 : .4}
+                          strokeWidth={hp === i ? 2 : 0} stroke="var(--surf)"/>
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={v => [`CHF ${fmt(v, 0)}`]}
+                      contentStyle={{ background:'var(--surf)', border:'1px solid var(--b2)', borderRadius:8, fontFamily:'var(--mono)', fontSize:11 }}/>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:4 }}>
+                  {pieData.map((d, i) => (
+                    <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ width:7, height:7, borderRadius:2, background:d.c, flexShrink:0 }}/>
+                        <span style={{ color:'var(--t2)' }}>{d.name}</span>
+                      </div>
+                      <span className="mono" style={{ fontWeight:700, fontSize:11 }}>CHF {fmt(d.v, 0)}</span>
+                    </div>
+                  ))}
                 </div>
-                <StatusBadge s={a.status}/>
-                {a.status === "pending" && (
-                  <div style={{ display:"flex", gap:5, flexShrink:0 }}>
-                    <button className="btn btn-ok">✓</button>
-                    <button className="btn btn-ko">✗</button>
-                  </div>
-                )}
+              </>
+            ) : <Spinner/>}
+          </div>
+        </div>
+
+        {/* Bottom row */}
+        <div className="g3">
+          {/* Alertes */}
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.10s' }}>
+            <SH>🔔 Alertes {alerts.length > 0 && <span className="badge s-rejected" style={{ marginLeft:5 }}>{alerts.length}</span>}</SH>
+            {alerts.length === 0 ? (
+              <div style={{ fontSize:12, color:'var(--tm)', padding:'8px 0' }}>✅ Aucune alerte</div>
+            ) : alerts.slice(0,4).map((a, i) => (
+              <div key={i} style={{ display:'flex', gap:8, padding:'8px 10px', marginBottom:6,
+                background:'var(--amberd)', borderRadius:7, border:'1px solid rgba(245,158,11,.2)' }}>
+                <span style={{ fontSize:12, flexShrink:0 }}>🪪</span>
+                <span style={{ fontSize:11, color:'var(--t2)', lineHeight:1.4 }}>
+                  {a.first_name} {a.last_name} — Permis {a.permit_type} expire dans {a.days_remaining}j
+                </span>
               </div>
             ))}
           </div>
 
-          <div className="card" style={{ padding:16 }}>
-            <SH>Soldes vacances 2025</SH>
-            <div style={{ display:"flex", flexDirection:"column", gap:11 }}>
-              {VAC.map((v, i) => (
-                <div key={i}>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:3 }}>
-                    <span style={{ fontWeight:600 }}>{v.n.split(" ")[0]}</span>
-                    <span className="mono" style={{ fontWeight:800,
-                      color: v.bal < 5 ? "var(--red)" : "var(--blue)" }}>{v.bal}j</span>
-                  </div>
-                  <ProgBar val={v.taken} max={v.ent} color={v.bal < 5 ? "var(--red)" : "var(--blue)"}/>
-                  <div style={{ fontSize:9, color:"var(--tm)", marginTop:1 }}>{v.taken} / {v.ent}j</div>
+          {/* Absences récentes */}
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.15s' }}>
+            <SH>🗓 Absences récentes</SH>
+            {abs.length === 0 ? <div style={{ fontSize:12, color:'var(--tm)' }}>Aucune absence</div>
+            : abs.map((a, i) => (
+              <div key={i} className="row" style={{ display:'flex', justifyContent:'space-between',
+                alignItems:'center', padding:'8px 4px', gap:8 }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:700 }}>{a.employee_name || `${a.first_name} ${a.last_name}`}</div>
+                  <div style={{ fontSize:10, color:'var(--tm)' }}>{a.absence_type} · {a.days_count}j</div>
                 </div>
-              ))}
-            </div>
+                <StatusBadge s={a.status}/>
+              </div>
+            ))}
+          </div>
+
+          {/* Soldes vacances */}
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.20s' }}>
+            <SH>🏖 Soldes vacances</SH>
+            {vac.length === 0 ? <div style={{ fontSize:12, color:'var(--tm)' }}>Aucune donnée</div>
+            : vac.map((v, i) => (
+              <div key={i} style={{ marginBottom:10 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:3 }}>
+                  <span style={{ fontWeight:600 }}>{v.first_name} {v.last_name?.charAt(0)}.</span>
+                  <span className="mono" style={{ color: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)', fontWeight:700 }}>
+                    {v.balance_days}j
+                  </span>
+                </div>
+                <div className="prog"><div className="prog-f" style={{ width:`${Math.min(100,(v.taken_days/v.entitled_days)*100)||0}%`, background: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)' }}/></div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1094,182 +915,893 @@ function Absences() {
   );
 }
 
-/* ═══ PAGE: TIME TRACKING ═══════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   PAGE: EMPLOYEES (câblé API + CRUD)
+══════════════════════════════════════════════════════════ */
+
+function EmpModal({ emp, onClose, onSaved }) {
+  const isNew = !emp?.id;
+  const [form, setForm] = useState(emp || {
+    first_name:'', last_name:'', email:'', phone:'',
+    birthdate:'', hire_date:'', contract_type:'CDI',
+    permit_type:'CH', activity_rate:100, weekly_hours:42,
+    salary_type:'monthly', salary_amount:'', department:'',
+    position:'', vacation_weeks:5, avs_number:'',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (k, v) => setForm(f => ({...f, [k]: v}));
+
+  const save = async () => {
+    setSaving(true); setErr('');
+    try {
+      const body = {
+        firstName: form.first_name, lastName: form.last_name,
+        email: form.email, phone: form.phone,
+        birthdate: form.birthdate || null, hireDate: form.hire_date,
+        contractType: form.contract_type, permitType: form.permit_type,
+        permitExpiry: form.permit_expiry || null,
+        activityRate: +form.activity_rate, weeklyHours: +form.weekly_hours,
+        salaryType: form.salary_type, salaryAmount: +form.salary_amount,
+        department: form.department, position: form.position,
+        vacationWeeks: +form.vacation_weeks, avsNumber: form.avs_number,
+      };
+      if (isNew) await apiFetch('/employees', 'POST', body);
+      else       await apiFetch(`/employees/${emp.id}`, 'PUT', body);
+      onSaved();
+    } catch(e) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  const F = ({ label, k, type='text', opts=null }) => (
+    <div>
+      <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{label}</label>
+      {opts ? (
+        <select className="inp" value={form[k]||''} onChange={e => set(k, e.target.value)}>
+          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input className="inp" type={type} value={form[k]||''} onChange={e => set(k, e.target.value)}/>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div style={{ fontWeight:800, fontSize:16 }}>{isNew ? '➕ Nouveau collaborateur' : `✏️ ${form.first_name} ${form.last_name}`}</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+
+        <div className="g2" style={{ gap:12, marginBottom:12 }}>
+          <F label="Prénom *" k="first_name"/>
+          <F label="Nom *" k="last_name"/>
+          <F label="Email" k="email" type="email"/>
+          <F label="Téléphone" k="phone"/>
+          <F label="Date naissance" k="birthdate" type="date"/>
+          <F label="Date entrée *" k="hire_date" type="date"/>
+          <F label="Contrat" k="contract_type" opts={['CDI','CDD','Horaire','Stage','Apprentissage']}/>
+          <F label="Permis" k="permit_type" opts={['CH','C','B','G','L','F','N']}/>
+          <F label="Expiry permis" k="permit_expiry" type="date"/>
+          <F label="Taux activité %" k="activity_rate" type="number"/>
+          <F label="Heures/sem" k="weekly_hours" type="number"/>
+          <F label="Type salaire" k="salary_type" opts={['monthly','hourly']}/>
+          <F label="Salaire CHF" k="salary_amount" type="number"/>
+          <F label="Département" k="department"/>
+          <F label="Poste" k="position"/>
+          <F label="Semaines vacances" k="vacation_weeks" opts={['4','5','6']}/>
+          <F label="N° AVS" k="avs_number"/>
+        </div>
+
+        {err && <div style={{ color:'var(--red)', fontSize:11, marginBottom:10 }}>⚠ {err}</div>}
+
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+          <button className="btn btn-g" onClick={onClose}>Annuler</button>
+          <button className="btn btn-p" onClick={save} disabled={saving}>
+            {saving ? <Spinner size={14}/> : (isNew ? '✅ Créer' : '💾 Enregistrer')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Employees() {
+  const w = useW();
+  const [q, setQ]     = useState('');
+  const [sel, setSel] = useState(null);
+  const [modal, setModal] = useState(null); // null | 'new' | emp obj
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+
+  const { data, loading, error, reload } = useApi(() => apiFetch('/employees'));
+  const employees = (data?.employees || []).filter(e =>
+    `${e.first_name} ${e.last_name}`.toLowerCase().includes(q.toLowerCase()) ||
+    (e.department||'').toLowerCase().includes(q.toLowerCase())
+  );
+
+  const del = async (id) => {
+    if (!confirm('Désactiver ce collaborateur ?')) return;
+    await apiFetch(`/employees/${id}`, 'DELETE');
+    reload();
+  };
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <Topbar title="Collaborateurs"
+        sub={loading ? 'Chargement…' : `${employees.length} / ${data?.employees?.length || 0} affiché(s)`}
+        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setModal('new')}>+ Nouveau</button>}/>
+
+      <div style={{ flex:1, overflowY:'auto', padding:p, paddingBottom: w < 768 ? 80 : undefined }}>
+        <div style={{ position:'relative', marginBottom:12 }}>
+          <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--tm)' }}>🔍</span>
+          <input className="inp" placeholder="Rechercher…" value={q} onChange={e => setQ(e.target.value)} style={{ paddingLeft:34 }}/>
+        </div>
+
+        <ApiState loading={loading} error={error}>
+          {w < 700 ? (
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }} className="stg">
+              {employees.map(emp => (
+                <div key={emp.id} className="card" style={{ padding:14 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                    <div style={{ width:38, height:38, borderRadius:'50%', background:'var(--blued)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:13, fontWeight:900, color:'var(--blue)', flexShrink:0 }}>
+                      {emp.first_name?.[0]}{emp.last_name?.[0]}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:14 }}>{emp.first_name} {emp.last_name}</div>
+                      <div style={{ fontSize:11, color:'var(--tm)' }}>{emp.department} · {emp.contract_type}</div>
+                    </div>
+                    <span className={`badge p-${emp.permit_type}`}>{emp.permit_type}</span>
+                  </div>
+                  <div className="g2" style={{ gap:8 }}>
+                    <div style={{ background:'var(--surf2)', borderRadius:7, padding:'8px 10px' }}>
+                      <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--tm)' }}>Salaire</div>
+                      <div className="mono" style={{ fontSize:17, fontWeight:900, color:'var(--blue)', marginTop:3 }}>
+                        {emp.salary_type === 'hourly' ? `${fmt(emp.salary_amount,2)}/h` : fmt(emp.salary_amount,0)}
+                        <span style={{ fontSize:10, color:'var(--tm)', fontWeight:400 }}> CHF</span>
+                      </div>
+                    </div>
+                    <div style={{ background:'var(--surf2)', borderRadius:7, padding:'8px 10px' }}>
+                      <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--tm)' }}>Activité</div>
+                      <div className="mono" style={{ fontSize:17, fontWeight:800, color:'var(--blue)', marginTop:6 }}>{emp.activity_rate}%</div>
+                    </div>
+                  </div>
+                  {emp.permit_expiring_soon && (
+                    <div style={{ marginTop:8, padding:'6px 10px', background:'var(--amberd)', borderRadius:6, fontSize:10, color:'var(--amber)', fontWeight:700 }}>
+                      ⚠ Permis expire bientôt
+                    </div>
+                  )}
+                  <div style={{ display:'flex', gap:6, marginTop:10 }}>
+                    <button className="btn btn-g" style={{ fontSize:10, flex:1 }} onClick={() => setModal(emp)}>✏️ Modifier</button>
+                    <button className="btn btn-ko" style={{ fontSize:10 }} onClick={() => del(emp.id)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="card">
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 80px 130px 100px 80px',
+                gap:10, padding:'9px 16px', background:'var(--surf2)',
+                borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
+                {['Collaborateur','Département','Contrat','Permis','Salaire CHF','Activité',''].map(h => (
+                  <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
+                ))}
+              </div>
+              {employees.map((emp, i) => (
+                <div key={emp.id} className="row" style={{ display:'grid',
+                  gridTemplateColumns:'2fr 1fr 1fr 80px 130px 100px 80px',
+                  gap:10, padding:'12px 16px', alignItems:'center',
+                  animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i*30}ms both`,
+                  cursor:'pointer' }} onClick={() => setSel(sel?.id === emp.id ? null : emp)}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ width:32, height:32, borderRadius:'50%', background:'var(--blued)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:11, fontWeight:900, color:'var(--blue)', flexShrink:0 }}>
+                      {emp.first_name?.[0]}{emp.last_name?.[0]}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700 }}>{emp.first_name} {emp.last_name}</div>
+                      {emp.permit_expiring_soon && <div style={{ fontSize:9, color:'var(--amber)' }}>⚠ Permis expire bientôt</div>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:12, color:'var(--t2)' }}>{emp.department || '—'}</div>
+                  <span className="badge" style={{ background:'var(--blued)', color:'var(--blue)' }}>{emp.contract_type}</span>
+                  <span className={`badge p-${emp.permit_type}`}>{emp.permit_type}</span>
+                  <div className="mono" style={{ fontSize:13, fontWeight:800 }}>
+                    {emp.salary_type === 'hourly' ? `${fmt(emp.salary_amount,2)}/h` : fmt(emp.salary_amount,0)}
+                  </div>
+                  <div>
+                    <div className="prog"><div className="prog-f" style={{ width:`${emp.activity_rate}%` }}/></div>
+                    <div style={{ fontSize:10, color:'var(--tm)', marginTop:2 }}>{emp.activity_rate}%</div>
+                  </div>
+                  <div style={{ display:'flex', gap:4 }} onClick={e => e.stopPropagation()}>
+                    <button className="btn btn-g" style={{ padding:'4px 8px', fontSize:10 }} onClick={() => setModal(emp)}>✏️</button>
+                    <button className="btn btn-ko" style={{ padding:'4px 8px', fontSize:10 }} onClick={() => del(emp.id)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+              {employees.length === 0 && !loading && (
+                <div style={{ padding:32, textAlign:'center', color:'var(--tm)', fontSize:13 }}>
+                  {q ? 'Aucun résultat' : 'Aucun collaborateur — cliquez + Nouveau'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sel && w >= 700 && (
+            <div className="card" style={{ marginTop:12, padding:18, animation:'scaleIn .25s cubic-bezier(.16,1,.3,1)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
+                <div style={{ fontWeight:800, fontSize:14 }}>{sel.first_name} {sel.last_name}</div>
+                <button onClick={() => setSel(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:'var(--tm)' }}>×</button>
+              </div>
+              <div className="g4" style={{ gap:10 }}>
+                {[
+                  ['Département', sel.department||'—'], ['Contrat', sel.contract_type],
+                  ['Permis', sel.permit_type], ['Taux', `${sel.activity_rate}%`],
+                  ['Âge', `${sel.age ?? '—'} ans`], ['Embauché(e)', fDate(sel.hire_date)],
+                  ['Salaire', sel.salary_type==='hourly' ? `${fmt(sel.salary_amount,2)} CHF/h` : `${fmt(sel.salary_amount,0)} CHF/m`],
+                  ['AVS', sel.avs_masked || sel.avs_number || '—'],
+                  ['Email', sel.email||'—'], ['Poste', sel.position||'—'],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ padding:'10px 12px', background:'var(--surf2)', borderRadius:8 }}>
+                    <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em', color:'var(--tm)', marginBottom:3 }}>{k}</div>
+                    <div style={{ fontSize:13, fontWeight:700, wordBreak:'break-all' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </ApiState>
+      </div>
+
+      {modal && <EmpModal
+        emp={modal === 'new' ? null : modal}
+        onClose={() => setModal(null)}
+        onSaved={() => { setModal(null); reload(); }}
+      />}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: ABSENCES (câblé API + approve/reject)
+══════════════════════════════════════════════════════════ */
+
+function Absences() {
+  const w = useW();
+  const [f, setF] = useState('all');
+  const [showNew, setShowNew] = useState(false);
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const COLORS = { 'Vacances':'#10b981','vacation':'#10b981','Maladie':'#ef4444','illness':'#ef4444','Accident NP':'#f59e0b','accident_np':'#f59e0b','Famille':'#3176A6','family':'#3176A6','Militaire':'#8b5cf6','military':'#8b5cf6' };
+
+  const { data, loading, error, reload } = useApi(() => apiFetch('/absences'));
+  const { data: vacD } = useApi(() => apiFetch(`/absences/vacation/balances?year=${YEAR}`));
+  const { data: empD } = useApi(() => apiFetch('/employees'));
+
+  const all = data?.absences || [];
+  const pending = all.filter(a => a.status === 'pending');
+  const list = f === 'all' ? all : all.filter(a => a.status === f);
+  const vac  = (vacD?.balances || []).slice(0, 8);
+
+  const approve = async (id) => { await apiFetch(`/absences/${id}/approve`, 'PUT'); reload(); };
+  const reject  = async (id) => { await apiFetch(`/absences/${id}/reject`, 'PUT', { reason: 'Refusé' }); reload(); };
+
+  const fTypeLabel = (t) => ({ vacation:'Vacances', illness:'Maladie', accident_np:'Acc. NP', accident_p:'Acc. P', family:'Famille', military:'Militaire' })[t] || t;
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Gestion des absences" sub="Congés · Maladie · Accidents · APG"
+        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowNew(true)}>+ Nouvelle</button>}/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+
+        <div className="tabs">
+          {[['all','Tout'],[`pending`,`En attente (${pending.length})`],['approved','Approuvé'],['rejected','Refusé']].map(([v, l]) => (
+            <button key={v} className={`tab${f === v ? ' on' : ''}`} onClick={() => setF(v)}>{l}</button>
+          ))}
+        </div>
+
+        <ApiState loading={loading} error={error}>
+          <div className="gabs">
+            <div className="card stg">
+              {list.length === 0 ? (
+                <div style={{ padding:32, textAlign:'center', color:'var(--tm)', fontSize:13 }}>Aucune absence</div>
+              ) : list.map((a, i) => {
+                const col = COLORS[a.absence_type] || 'var(--blue)';
+                return (
+                  <div key={a.id} className="row" style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px' }}>
+                    <div style={{ width:3, alignSelf:'stretch', borderRadius:2, flexShrink:0, background:col }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:2 }}>
+                        <span style={{ fontWeight:700, fontSize:13 }}>{a.first_name} {a.last_name}</span>
+                        <span className="badge" style={{ background:col+'1a', color:col, fontSize:8 }}>{fTypeLabel(a.absence_type)}</span>
+                      </div>
+                      <div style={{ fontSize:10, color:'var(--tm)' }}>
+                        {fDate(a.start_date)} → {fDate(a.end_date)} · <strong>{a.days_count}j</strong>
+                        {a.reason && ` · ${a.reason}`}
+                      </div>
+                    </div>
+                    <StatusBadge s={a.status}/>
+                    {a.status === 'pending' && (
+                      <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                        <button className="btn btn-ok" onClick={() => approve(a.id)}>✓</button>
+                        <button className="btn btn-ko" onClick={() => reject(a.id)}>✗</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="card" style={{ padding:16 }}>
+              <SH>Soldes vacances {YEAR}</SH>
+              <div style={{ display:'flex', flexDirection:'column', gap:11 }}>
+                {vac.length === 0 ? <div style={{ fontSize:11, color:'var(--tm)' }}>Aucun solde</div>
+                : vac.map((v, i) => (
+                  <div key={i}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:3 }}>
+                      <span style={{ fontWeight:600 }}>{v.first_name} {v.last_name?.charAt(0)}.</span>
+                      <span className="mono" style={{ fontWeight:800, color: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)' }}>{v.balance_days}j</span>
+                    </div>
+                    <div className="prog">
+                      <div className="prog-f" style={{ width:`${Math.min(100,(v.taken_days/v.entitled_days)*100)||0}%`,
+                        background: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)' }}/>
+                    </div>
+                    <div style={{ fontSize:9, color:'var(--tm)', marginTop:1 }}>{v.taken_days}/{v.entitled_days}j</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </ApiState>
+      </div>
+
+      {showNew && <NewAbsenceModal
+        employees={empD?.employees || []}
+        onClose={() => setShowNew(false)}
+        onSaved={() => { setShowNew(false); reload(); }}
+      />}
+    </div>
+  );
+}
+
+function NewAbsenceModal({ employees, onClose, onSaved }) {
+  const [form, setForm] = useState({ employee_id:'', absence_type:'vacation', start_date:'', end_date:'', reason:'' });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({...f, [k]:v}));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiFetch('/absences', 'POST', form);
+      onSaved();
+    } catch(e) { alert(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div style={{ fontWeight:800, fontSize:16 }}>🏖 Nouvelle absence</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {[['Collaborateur','employee_id','sel'], ['Type','absence_type','type'], ['Début','start_date','date'], ['Fin','end_date','date'], ['Remarque','reason','text']].map(([lbl, k, type]) => (
+            <div key={k}>
+              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{lbl}</label>
+              {type === 'sel' ? (
+                <select className="inp" value={form[k]} onChange={e => set(k, e.target.value)}>
+                  <option value="">— Sélectionner —</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                </select>
+              ) : type === 'type' ? (
+                <select className="inp" value={form[k]} onChange={e => set(k, e.target.value)}>
+                  {[['vacation','Vacances'],['illness','Maladie'],['accident_np','Accident NP'],['accident_p','Accident P'],['family','Famille'],['military','Militaire']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              ) : (
+                <input className="inp" type={type === 'date' ? 'date' : 'text'} value={form[k]||''} onChange={e => set(k, e.target.value)}/>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:20 }}>
+          <button className="btn btn-g" onClick={onClose}>Annuler</button>
+          <button className="btn btn-p" onClick={save} disabled={saving}>{saving ? <Spinner size={14}/> : '✅ Créer'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: TIME TRACKING (câblé API)
+══════════════════════════════════════════════════════════ */
 
 function TimeTracking() {
   const w = useW();
-  const [emp, setEmp] = useState(EMPLOYEES[0]);
-  const totalH  = TIME_W.reduce((a, e) => a + e.worked, 0);
-  const totalOT = TIME_W.reduce((a, e) => a + e.ot, 0);
-  const target  = emp.rt / 100 * 42;
-  const p = w < 600 ? "14px 12px" : "18px 26px";
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [empId, setEmpId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const { data: empD } = useApi(() => apiFetch('/employees'));
+  const employees = empD?.employees || [];
+
+  const { data: timeD, reload: reloadTime } = useApi(
+    () => empId ? apiFetch(`/time/summary/${empId}?year=${YEAR}&month=${MONTH}`) : Promise.resolve(null),
+    [empId]
+  );
+
+  useEffect(() => { if (employees.length > 0 && !empId) setEmpId(String(employees[0].id)); }, [employees]);
+
+  const emp = employees.find(e => String(e.id) === String(empId));
+  const summary = timeD?.summary;
+  const entries = timeD?.entries || [];
 
   return (
-    <div style={{ flex:1, overflowY:"auto", paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Pointage & Présences" sub="LTr Art. 15 · Centièmes ou H:MM"
-        actions={<button className="btn btn-p" style={{ fontSize:11 }}>💾 Enregistrer</button>}/>
-      <div style={{ padding:p, display:"flex", flexDirection:"column", gap:14 }}>
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Pointage & Présences" sub="LTr Art. 15 · Heures de travail"
+        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={async () => {
+          if (!empId) return;
+          setSaving(true);
+          // Save current entries
+          setSaving(false);
+        }}>💾 Enregistrer</button>}
+      />
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
         <div className="gtime">
-
-          {/* Left */}
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div className="card" style={{ padding:16 }}>
-              <label style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:".05em",
-                color:"var(--tm)", display:"block", marginBottom:8 }}>Collaborateur</label>
-              <select className="inp" value={emp.id} onChange={e => setEmp(EMPLOYEES.find(x => x.id === +e.target.value))}>
-                {EMPLOYEES.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:8 }}>Collaborateur</label>
+              <select className="inp" value={empId} onChange={e => setEmpId(e.target.value)}>
+                {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
               </select>
             </div>
 
-            <div className="card" style={{ padding:16 }}>
-              <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>📅 Semaine 03–07 mars</div>
-              {[
-                { l:"Travaillées",    v:hToHMM(totalH),   c:"var(--blue)" },
-                { l:"Contractuelles", v:hToHMM(target),   c:"var(--tm)" },
-                { l:"Heures supp.",   v:hToHMM(totalOT),  c:"var(--amber)" },
-                { l:"Solde",          v:(totalH - target >= 0 ? "+" : "") + hToHMM(totalH - target),
-                  c: totalH >= target ? "var(--green)" : "var(--red)" },
-              ].map((row, i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0",
-                  borderTop: i > 0 ? "1px solid var(--b1)" : undefined }}>
-                  <span style={{ fontSize:12, color:"var(--t2)" }}>{row.l}</span>
-                  <span className="mono" style={{ fontSize:14, fontWeight:900, color:row.c }}>{row.v}</span>
+            {summary && (
+              <div className="card" style={{ padding:16 }}>
+                <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>📅 Résumé {new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})}</div>
+                {[
+                  ['Travaillées',    hToHMM(summary.total_worked_hours||0),    'var(--blue)'],
+                  ['Contractuelles', hToHMM(summary.target_hours||0),           'var(--tm)'],
+                  ['Heures supp.',   hToHMM(summary.overtime_hours||0),         'var(--amber)'],
+                  ['Solde',         (summary.balance_hours >= 0 ? '+' : '') + hToHMM(summary.balance_hours||0),
+                    summary.balance_hours >= 0 ? 'var(--green)' : 'var(--red)'],
+                ].map(([l, v, c], i) => (
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0',
+                    borderTop: i > 0 ? '1px solid var(--b1)' : undefined }}>
+                    <span style={{ fontSize:12, color:'var(--t2)' }}>{l}</span>
+                    <span className="mono" style={{ fontSize:14, fontWeight:900, color:c }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ padding:12, background:'var(--amberd)', borderRadius:8, border:'1px solid rgba(245,158,11,.2)', fontSize:11 }}>
+              <div style={{ fontWeight:700, color:'var(--amber)', marginBottom:4 }}>⚖️ Pauses légales LTr</div>
+              <div style={{ color:'var(--t2)', lineHeight:1.7 }}>{'>'} 5h30 → 15 min<br/>{'>'} 7h → 30 min<br/>{'>'} 9h → 60 min</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div style={{ padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:13 }}>
+              Feuille de temps — {new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})}
+            </div>
+            {entries.length === 0 ? (
+              <div style={{ padding:32, textAlign:'center', color:'var(--tm)', fontSize:13 }}>
+                Aucune entrée ce mois
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'grid',
+                  gridTemplateColumns: w < 500 ? '70px 1fr 1fr 60px' : '100px 80px 80px 60px 70px 60px',
+                  gap:6, padding:'8px 14px', background:'var(--surf2)', borderBottom:'1px solid var(--b1)',
+                  fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>
+                  {(w < 500 ? ['Date','Arrivée','Départ','Total'] : ['Date','Arrivée','Départ','Pause','Total','HS']).map(h => <div key={h}>{h}</div>)}
+                </div>
+                {entries.map((e, i) => (
+                  <div key={e.id} className="row" style={{ display:'grid',
+                    gridTemplateColumns: w < 500 ? '70px 1fr 1fr 60px' : '100px 80px 80px 60px 70px 60px',
+                    gap:6, padding:'10px 14px', alignItems:'center',
+                    animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i*40}ms both` }}>
+                    <div style={{ fontSize:11, fontWeight:700 }}>{fDate(e.work_date)}</div>
+                    <div className="mono" style={{ fontSize:12 }}>{e.start_time || '—'}</div>
+                    <div className="mono" style={{ fontSize:12 }}>{e.end_time || '—'}</div>
+                    {w >= 500 && <div className="mono" style={{ fontSize:11 }}>{hToHMM(e.break_minutes/60||0)}</div>}
+                    <div className="mono" style={{ fontSize:13, fontWeight:900, color:'var(--blue)' }}>{hToHMM(e.worked_hours||0)}</div>
+                    {w >= 500 && <div className="mono" style={{ fontSize:12, fontWeight:800, color: (e.overtime_hours||0) > 0 ? 'var(--amber)' : 'var(--tm)' }}>
+                      {(e.overtime_hours||0) > 0 ? hToHMM(e.overtime_hours) : '—'}
+                    </div>}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: PAYROLL (bulletins de salaire)
+══════════════════════════════════════════════════════════ */
+function Payroll() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [month, setMonth] = useState(MONTH);
+  const [year, setYear]   = useState(YEAR);
+
+  const { data: pD, loading, error, reload } = useApi(
+    () => apiFetch(`/salary/payslips?year=${year}&month=${month}`), [year, month]
+  );
+  const payslips = pD?.payslips || [];
+  const total = payslips.reduce((s, p) => s + parseFloat(p.gross_salary||0), 0);
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Module Paie" sub="Bulletins de salaire · Validation mensuelle"
+        actions={<>
+          <button className="btn btn-g" style={{ fontSize:11 }}
+            onClick={() => window.open(`/api/exports/payslips.csv?year=${year}&month=${month}`, '_blank')}>
+            📤 Export CSV
+          </button>
+        </>}/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <select className="inp" style={{ width:100 }} value={month} onChange={e => setMonth(+e.target.value)}>
+            {Array.from({length:12},(_,i) => <option key={i+1} value={i+1}>{new Date(2025,i).toLocaleString('fr-CH',{month:'long'})}</option>)}
+          </select>
+          <select className="inp" style={{ width:80 }} value={year} onChange={e => setYear(+e.target.value)}>
+            {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {total > 0 && <div className="mono" style={{ fontWeight:800, fontSize:16, color:'var(--blue)', marginLeft:8 }}>
+            Total brut: CHF {fmt(total,0)}
+          </div>}
+        </div>
+
+        <ApiState loading={loading} error={error}>
+          {payslips.length === 0 ? (
+            <div style={{ padding:40, textAlign:'center' }}>
+              <div style={{ fontSize:36, marginBottom:12 }}>💳</div>
+              <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Aucun bulletin ce mois</div>
+              <div style={{ fontSize:12, color:'var(--tm)' }}>Les bulletins sont générés via le calculateur de salaire</div>
+            </div>
+          ) : (
+            <div className="card">
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px',
+                gap:10, padding:'9px 16px', background:'var(--surf2)',
+                borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
+                {['Employé','Brut','Net','Charges er.','Coût total',''].map(h => (
+                  <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
+                ))}
+              </div>
+              {payslips.map((ps, i) => (
+                <div key={ps.id} className="row" style={{ display:'grid',
+                  gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px',
+                  gap:10, padding:'12px 16px', alignItems:'center',
+                  animation:`slideUp .4s ${i*30}ms both` }}>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{ps.first_name} {ps.last_name}</div>
+                  <div className="mono" style={{ fontWeight:800, color:'var(--blue)' }}>{fCHF(ps.gross_salary)}</div>
+                  <div className="mono" style={{ fontWeight:800, color:'var(--green)' }}>{fCHF(ps.net_salary)}</div>
+                  <div className="mono" style={{ fontSize:12, color:'var(--amber)' }}>{fCHF(ps.total_employer)}</div>
+                  <div className="mono" style={{ fontWeight:800 }}>{fCHF(ps.total_cost)}</div>
+                  <span className={`badge s-${ps.status||'approved'}`}>{ps.status||'validé'}</span>
                 </div>
               ))}
             </div>
-
-            <div style={{ padding:12, background:"var(--amberd)", borderRadius:8,
-              border:"1px solid rgba(245,158,11,.2)", fontSize:11 }}>
-              <div style={{ fontWeight:700, color:"var(--amber)", marginBottom:4 }}>⚖️ Pauses légales</div>
-              <div style={{ color:"var(--t2)", lineHeight:1.7 }}>
-                {"> "}5h30 → 15 min<br/>{"> "}7h → 30 min<br/>{"> "}9h → 60 min
-              </div>
-            </div>
-          </div>
-
-          {/* Right: timesheet */}
-          <div className="card">
-            <div style={{ padding:"14px 18px", borderBottom:"1px solid var(--b1)", fontWeight:700, fontSize:13 }}>
-              Feuille de temps — Mars 2025
-            </div>
-            <div style={{ display:"grid",
-              gridTemplateColumns: w < 500 ? "70px 1fr 1fr 60px" : "80px 80px 80px 50px 70px 60px",
-              gap:6, padding:"8px 14px", background:"var(--surf2)", borderBottom:"1px solid var(--b1)",
-              fontSize:9, fontWeight:700, letterSpacing:".05em", textTransform:"uppercase", color:"var(--tm)" }}>
-              {(w < 500 ? ["Date","Arrivée","Départ","Total"] : ["Date","Arrivée","Départ","Pause","Total","HS"]).map(h => <div key={h}>{h}</div>)}
-            </div>
-            {TIME_W.map((e, i) => (
-              <div key={i} className="row" style={{ display:"grid",
-                gridTemplateColumns: w < 500 ? "70px 1fr 1fr 60px" : "80px 80px 80px 50px 70px 60px",
-                gap:6, padding:"10px 14px", alignItems:"center",
-                animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i * 40}ms both` }}>
-                <div style={{ fontSize:11, fontWeight:700 }}>{e.d}</div>
-                <input className="inp mono" defaultValue={e.arr} style={{ padding:"6px 8px", fontSize:12 }}/>
-                <input className="inp mono" defaultValue={e.dep} style={{ padding:"6px 8px", fontSize:12 }}/>
-                {w >= 500 && <input className="inp mono" defaultValue="00:30" style={{ padding:"5px 7px", fontSize:11 }}/>}
-                <div className="mono" style={{ fontSize:13, fontWeight:900, color:"var(--blue)" }}>{hToHMM(e.worked)}</div>
-                {w >= 500 && <div className="mono" style={{ fontSize:12, fontWeight:800, color: e.ot > 0 ? "var(--amber)" : "var(--tm)" }}>
-                  {e.ot > 0 ? hToHMM(e.ot) : "—"}
-                </div>}
-              </div>
-            ))}
-            <div style={{ display:"grid",
-              gridTemplateColumns: w < 500 ? "70px 1fr 1fr 60px" : "80px 80px 80px 50px 70px 60px",
-              gap:6, padding:"12px 14px", background:"var(--surf2)", borderTop:"2px solid var(--b2)" }}>
-              <div style={{ fontWeight:800, fontSize:11 }}>TOTAL</div>
-              <div/><div/>
-              {w >= 500 && <div/>}
-              <div className="mono" style={{ fontWeight:900, fontSize:14, color:"var(--blue)" }}>{hToHMM(totalH)}</div>
-              {w >= 500 && <div className="mono" style={{ fontWeight:800, fontSize:12, color:"var(--amber)" }}>{hToHMM(totalOT)}</div>}
-            </div>
-          </div>
-        </div>
+          )}
+        </ApiState>
       </div>
     </div>
   );
 }
 
-/* ═══ PLACEHOLDER ═══════════════════════════════════════ */
-
-function Placeholder({ icon, title, desc }) {
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-      justifyContent:"center", gap:14, padding:32, paddingBottom:80, textAlign:"center" }}>
-      <div style={{ fontSize:52 }}>{icon}</div>
-      <div style={{ fontWeight:900, fontSize:20 }}>{title}</div>
-      <div style={{ fontSize:13, color:"var(--tm)", maxWidth:320, lineHeight:1.6 }}>{desc}</div>
-      <button className="btn btn-p">Bientôt disponible</button>
-    </div>
-  );
-}
-
-/* ═══ LOGIN ══════════════════════════════════════════════ */
-
-function Login({ onLogin }) {
-  const [email, setEmail] = useState("admin@swissrh.ch");
-  const [pass,  setPass]  = useState("");
-  const [load,  setLoad]  = useState(false);
+/* ══════════════════════════════════════════════════════════
+   PAGE: RAPPORTS (exports AVS, Lohnausweis)
+══════════════════════════════════════════════════════════ */
+function Reports() {
   const w = useW();
-
-  function go() {
-    setLoad(true);
-    setTimeout(() => { setLoad(false); onLogin(); }, 900);
-  }
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [year, setYear] = useState(YEAR);
+  const { data: avsD, loading } = useApi(() => apiFetch(`/reports/avs?year=${year}`), [year]);
+  const rows = avsD?.declarations || [];
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
-      background:"#06070e", position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"fixed", inset:0, background:"radial-gradient(ellipse 80% 50% at 20% 40%,rgba(179,45,38,.07) 0%,transparent 50%),radial-gradient(ellipse 60% 40% at 80% 20%,rgba(54,99,137,.08) 0%,transparent 50%),#06070e" }}/>
-      <div style={{ position:"fixed", inset:0, backgroundImage:"linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px)", backgroundSize:"60px 60px", maskImage:"radial-gradient(ellipse at center,black 30%,transparent 70%)" }}/>
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Rapports & Exports" sub="AVS · Lohnausweis · IS cantonaux"/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
 
-      <div style={{ position:"relative", zIndex:1, width:"100%", maxWidth:420, padding: w < 480 ? "16px" : "24px" }}>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:30 }}>
-          <SwissRHLogo height={w < 420 ? 38 : 46} dark/>
-        </div>
-
-        <div style={{ background:"rgba(15,18,32,.88)", backdropFilter:"blur(20px)",
-          border:"1px solid rgba(255,255,255,.08)", borderRadius:20,
-          padding: w < 480 ? "22px 20px" : "30px 28px" }}>
-          <div style={{ fontWeight:900, fontSize:22, color:"#fff", marginBottom:4 }}>Connexion</div>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,.35)", marginBottom:24 }}>Accès sécurisé à votre espace RH</div>
-
-          {[["Email","email",email,setEmail],["Mot de passe","password",pass,setPass]].map(([lbl, type, val, set]) => (
-            <div key={lbl} style={{ marginBottom:14 }}>
-              <label style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", letterSpacing:".08em",
-                color:"rgba(255,255,255,.35)", display:"block", marginBottom:6 }}>{lbl}</label>
-              <input className="inp" type={type} value={val} onChange={e => set(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && go()}
-                style={{ background:"rgba(255,255,255,.06)", borderColor:"rgba(255,255,255,.1)", color:"#fff" }}/>
+        <div className="g3">
+          {[
+            { icon:'🏦', title:'Déclaration AVS', desc:`Masse salariale ${year} — export CSV`, action: () => window.open(`/api/exports/avs.csv?year=${year}`, '_blank'), color:'var(--blue)' },
+            { icon:'📋', title:'Lohnausweis', desc:'Certificat de salaire 15 cases', action: () => alert('PDF Lohnausweis — bientôt disponible'), color:'var(--purple)' },
+            { icon:'👥', title:'Export employés', desc:'Liste complète — données RH', action: () => window.open('/api/exports/employees.csv', '_blank'), color:'var(--green)' },
+          ].map((r, i) => (
+            <div key={i} className="card" style={{ padding:20, cursor:'pointer', transition:'box-shadow .2s' }}
+              onClick={r.action}
+              onMouseEnter={e => e.currentTarget.style.boxShadow='0 4px 20px rgba(0,0,0,.08)'}
+              onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
+              <div style={{ fontSize:28, marginBottom:10 }}>{r.icon}</div>
+              <div style={{ fontWeight:800, fontSize:14, marginBottom:4 }}>{r.title}</div>
+              <div style={{ fontSize:11, color:'var(--tm)', marginBottom:14 }}>{r.desc}</div>
+              <button className="btn btn-p" style={{ fontSize:11, background:r.color }}>📥 Télécharger</button>
             </div>
           ))}
+        </div>
 
-          <button className="btn btn-p" onClick={go} disabled={load}
-            style={{ width:"100%", justifyContent:"center", padding:"12px", fontSize:14, fontWeight:800, marginTop:6 }}>
-            {load ? <><Spinner/>&nbsp;Connexion…</> : "→ Se connecter"}
-          </button>
-          <div style={{ textAlign:"center", marginTop:16, fontSize:10, color:"rgba(255,255,255,.25)" }}>
-            🔒 TLS · swissrh.ch · Groupe NEO
+        <div className="card">
+          <div style={{ padding:'14px 18px', borderBottom:'1px solid var(--b1)', display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ fontWeight:700, fontSize:14, flex:1 }}>📊 Base AVS {year}</div>
+            <select className="inp" style={{ width:80 }} value={year} onChange={e => setYear(+e.target.value)}>
+              {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
           </div>
+          <ApiState loading={loading} error={null}>
+            {rows.length === 0 ? (
+              <div style={{ padding:32, textAlign:'center', color:'var(--tm)' }}>Aucune donnée pour {year}</div>
+            ) : rows.map((r, i) => (
+              <div key={i} className="row" style={{ display:'grid',
+                gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr',
+                gap:10, padding:'12px 18px', alignItems:'center' }}>
+                <div style={{ fontWeight:700, fontSize:13 }}>{r.first_name} {r.last_name}</div>
+                <div style={{ fontSize:11, color:'var(--tm)', fontFamily:'var(--mono)' }}>{r.avs_number || '—'}</div>
+                <div className="mono" style={{ fontWeight:800 }}>{fCHF(r.annual_gross)}</div>
+                <div className="mono" style={{ color:'var(--blue)' }}>{fCHF(r.avs_employee_total)}</div>
+                <div className="mono" style={{ color:'var(--amber)' }}>{fCHF(r.avs_employer_total)}</div>
+              </div>
+            ))}
+          </ApiState>
         </div>
       </div>
     </div>
   );
 }
 
-/* ═══ APP ROOT ═══════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   PAGE: SETTINGS (paramètres entreprise)
+══════════════════════════════════════════════════════════ */
+function Settings() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const { data, loading, reload } = useApi(() => apiFetch('/company'));
+  const [form, setForm] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
+  useEffect(() => { if (data?.company) setForm(data.company); }, [data]);
+
+  const set = (k, v) => setForm(f => ({...f, [k]: v}));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiFetch('/company', 'PUT', form);
+      setSaved(true); setTimeout(() => setSaved(false), 2500);
+      reload();
+    } catch(e) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const F = ({ label, k, type='text', opts=null }) => !form ? null : (
+    <div>
+      <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{label}</label>
+      {opts ? (
+        <select className="inp" value={form[k]||''} onChange={e => set(k, e.target.value)}>
+          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input className="inp" type={type} value={form[k]||''} onChange={e => set(k, e.target.value)}/>
+      )}
+    </div>
+  );
+
+  const CANTONS = ['AG','AI','AR','BE','BL','BS','FR','GE','GL','GR','JU','LU','NE','NW','OW','SG','SH','SO','SZ','TG','TI','UR','VD','VS','ZG','ZH'];
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Paramètres entreprise" sub="Configuration · Assurances · Jours fériés"/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+        <ApiState loading={loading} error={null}>
+          {form && (
+            <>
+              <div className="card" style={{ padding:20 }}>
+                <SH>🏢 Informations entreprise</SH>
+                <div className="g2" style={{ gap:12 }}>
+                  <F label="Raison sociale" k="name"/>
+                  <F label="Forme juridique" k="legal_form" opts={['Sàrl','SA','Raison individuelle','Association','Fondation']}/>
+                  <F label="N° IDE (CHE-xxx)" k="uid"/>
+                  <F label="Canton" k="canton" opts={CANTONS}/>
+                  <F label="Adresse" k="address"/>
+                  <F label="NPA" k="npa"/>
+                  <F label="Ville" k="city"/>
+                  <F label="N° caisse AVS" k="avs_number"/>
+                  <F label="N° institution LPP" k="lpp_number"/>
+                  <F label="N° police LAA" k="laa_number"/>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding:20 }}>
+                <SH>📊 Taux d'assurance</SH>
+                <div className="g4" style={{ gap:12 }}>
+                  {[
+                    ['LAA NP (%)', 'laa_np_rate'],
+                    ['LAA P (%)', 'laa_p_rate'],
+                    ['IJM total (%)', 'ijm_rate'],
+                    ['All. familiales (%)', 'fam_alloc'],
+                  ].map(([l, k]) => (
+                    <div key={k}>
+                      <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{l}</label>
+                      <input className="inp" type="number" step="0.001" min="0" max="0.5"
+                        value={((form[k]||0)*100).toFixed(3)}
+                        onChange={e => set(k, parseFloat(e.target.value)/100)}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+                {saved && <div style={{ padding:'8px 14px', background:'var(--greend)', borderRadius:8, fontSize:12, color:'var(--green)', fontWeight:700 }}>✅ Enregistré</div>}
+                <button className="btn btn-p" onClick={save} disabled={saving}>
+                  {saving ? <Spinner size={14}/> : '💾 Enregistrer'}
+                </button>
+              </div>
+            </>
+          )}
+        </ApiState>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: VACATIONS (soldes vacances)
+══════════════════════════════════════════════════════════ */
+function Vacations() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [year, setYear] = useState(YEAR);
+  const { data, loading, error } = useApi(
+    () => apiFetch(`/absences/vacation/balances?year=${year}`), [year]
+  );
+  const balances = data?.balances || [];
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Soldes Vacances" sub="Droits · Pris · Soldes · Pro-rata"
+        actions={
+          <select className="inp" style={{ width:80 }} value={year} onChange={e => setYear(+e.target.value)}>
+            {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        }/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+        <ApiState loading={loading} error={error}>
+          {balances.length === 0 ? (
+            <div style={{ padding:40, textAlign:'center' }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>🏖</div>
+              <div style={{ fontWeight:700, fontSize:15 }}>Aucun solde pour {year}</div>
+            </div>
+          ) : (
+            <>
+              <div className="g4">
+                {[
+                  { l:'Total droit', v: balances.reduce((s,b) => s + (b.entitled_days||0), 0), icon:'📅', c:'var(--blue)' },
+                  { l:'Pris', v: balances.reduce((s,b) => s + (b.taken_days||0), 0), icon:'✅', c:'var(--green)' },
+                  { l:'Solde total', v: balances.reduce((s,b) => s + (b.balance_days||0), 0), icon:'🏖', c:'var(--amber)' },
+                  { l:'Alerte > 20j', v: balances.filter(b => b.balance_days > 20).length, icon:'⚠', c:'var(--red)', isNum:true },
+                ].map((k, i) => <KpiCard key={i} label={k.l} value={k.v} sub={k.isNum ? 'employés' : 'jours'} color={k.c} icon={k.icon} isNum={k.isNum} delay={i*60}/>)}
+              </div>
+
+              <div className="card">
+                <div style={{ display:'grid', gridTemplateColumns:'2fr 80px 80px 80px 80px 120px',
+                  gap:10, padding:'9px 16px', background:'var(--surf2)',
+                  borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
+                  {['Collaborateur','Droit','Pris','Solde','Report','Statut'].map(h => (
+                    <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
+                  ))}
+                </div>
+                {balances.map((b, i) => (
+                  <div key={i} className="row" style={{ display:'grid',
+                    gridTemplateColumns:'2fr 80px 80px 80px 80px 120px',
+                    gap:10, padding:'12px 16px', alignItems:'center',
+                    animation:`slideUp .4s ${i*30}ms both` }}>
+                    <div style={{ fontWeight:700, fontSize:13 }}>{b.first_name} {b.last_name}</div>
+                    <div className="mono" style={{ fontWeight:800 }}>{b.entitled_days}j</div>
+                    <div className="mono" style={{ color:'var(--green)' }}>{b.taken_days}j</div>
+                    <div className="mono" style={{ fontWeight:900,
+                      color: b.balance_days < 5 ? 'var(--red)' : b.balance_days > 20 ? 'var(--amber)' : 'var(--blue)' }}>
+                      {b.balance_days}j
+                    </div>
+                    <div className="mono" style={{ fontSize:12, color:'var(--tm)' }}>{b.carried_over||0}j</div>
+                    <div>
+                      <div className="prog">
+                        <div className="prog-f" style={{ width:`${Math.min(100,(b.taken_days/b.entitled_days)*100)||0}%`,
+                          background: b.balance_days < 5 ? 'var(--red)' : b.balance_days > 20 ? 'var(--amber)' : 'var(--blue)' }}/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </ApiState>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PLACEHOLDER (modules futurs)
+══════════════════════════════════════════════════════════ */
+function Placeholder({ icon, title, desc }) {
+  return (
+    <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ textAlign:'center', padding:40, maxWidth:360 }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>{icon}</div>
+        <div style={{ fontWeight:800, fontSize:18, marginBottom:8 }}>{title}</div>
+        <div style={{ fontSize:13, color:'var(--tm)', lineHeight:1.7 }}>{desc}</div>
+        <div style={{ marginTop:16, padding:'8px 14px', background:'var(--amberd)', borderRadius:8,
+          fontSize:11, color:'var(--amber)', fontWeight:700 }}>🚧 En développement</div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ══ LOGIN ══════════════════════════════════════════════ */
+function Login({ onLogin }) {
+  const [email, setEmail] = useState('admin@swissrh.ch');
+  const [pwd, setPwd]     = useState('');
+  const [err, setErr]     = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setLoading(true); setErr('');
+    try {
+      await apiFetch('/auth/login', 'POST', { email, password: pwd });
+      onLogin();
+    } catch(e) { setErr(e.message || 'Identifiants incorrects'); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
+      background:'var(--bg)', padding:16 }}>
+      <div className="card" style={{ width:'100%', maxWidth:380, padding:36 }}>
+        <div style={{ textAlign:'center', marginBottom:28 }}>
+          <SwissRHLogo height={44}/>
+          <div style={{ fontSize:12, color:'var(--tm)', marginTop:8 }}>Plateforme RH Suisse</div>
+        </div>
+        {[['Email','email','email',email,setEmail],['Mot de passe','password','password',pwd,setPwd]].map(([lbl,type,id,val,fn]) => (
+          <div key={id} style={{ marginBottom:14 }}>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{lbl}</label>
+            <input className="inp" id={id} type={type} value={val} onChange={e => fn(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submit()}/>
+          </div>
+        ))}
+        {err && <div style={{ color:'var(--red)', fontSize:12, marginBottom:10 }}>⚠ {err}</div>}
+        <button className="btn btn-p" style={{ width:'100%', justifyContent:'center', padding:'10px 0', fontSize:13 }}
+          onClick={submit} disabled={loading}>
+          {loading ? <Spinner size={16}/> : '🔐 Se connecter'}
+        </button>
+        <div style={{ marginTop:16, textAlign:'center', fontSize:11, color:'var(--tm)' }}>
+          Neukomm Group · WW Finance Group Sàrl
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ APP ROOT ═══════════════════════════════════════════ */
 export default function App() {
-  const [auth, setAuth]       = useState(false);
-  const [page, setPage]       = useState("dashboard");
-  const [menu, setMenu]       = useState(false);
+  const [auth, setAuth] = useState(false);
+  const [page, setPage] = useState('dashboard');
+  const [menu, setMenu] = useState(false);
   const w = useW();
 
-  if (!auth) return (
-    <>
-      <style>{CSS}</style>
-      <Login onLogin={() => setAuth(true)}/>
-    </>
-  );
+  if (!auth) return (<><style>{CSS}</style><Login onLogin={() => setAuth(true)}/></>);
 
   const PAGES = {
     dashboard: <Dashboard/>,
@@ -1277,19 +1809,18 @@ export default function App() {
     salary:    <SalaryCalc/>,
     absences:  <Absences/>,
     time:      <TimeTracking/>,
-    payroll:   <Placeholder icon="💳" title="Module Paie"     desc="Bulletins de salaire PDF, validation mensuelle, export CSV/PDF."/>,
-    vacations: <Placeholder icon="🏖" title="Soldes Vacances" desc="Gestion des soldes, report max 5j, pro-rata entrée/sortie."/>,
-    reports:   <Placeholder icon="📊" title="Rapports"        desc="Lohnausweis 15 cases, IS cantonaux, export CSV compatible (format ELM non certifié)."/>,
-    documents: <Placeholder icon="📄" title="Documents RH"    desc="Contrats, attestations CO 330a, certificats de travail."/>,
-    settings:  <Placeholder icon="⚙" title="Paramètres"      desc="Configuration entreprise, taux d'assurance, jours fériés."/>,
+    payroll:   <Payroll/>,
+    vacations: <Vacations/>,
+    reports:   <Reports/>,
+    settings:  <Settings/>,
+    documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail. Génération PDF automatique."/>,
   };
 
   return (
-    <>
-      <style>{CSS}</style>
-      <div style={{ display:"flex", height:"100vh", overflow:"hidden" }}>
+    <><style>{CSS}</style>
+      <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
         <Sidebar page={page} setPage={setPage} open={menu} setOpen={setMenu}/>
-        <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"var(--bg)" }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background:'var(--bg)' }}>
           {PAGES[page] ?? <Dashboard/>}
         </div>
       </div>
