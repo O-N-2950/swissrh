@@ -2883,3 +2883,5 @@ export default function App() {
     </>
   );
 }
+
+export { App as AppShell };
