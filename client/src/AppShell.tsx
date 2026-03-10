@@ -514,38 +514,212 @@ function Sidebar({ page, setPage, open, setOpen, user, onLogout }) {
 /* ═══ DATA ══════════════════════════════════════════════ */
 
 
+// ── Secteurs côté frontend (miroir de sector-contributions.ts) ──────────
+const SECTOR_CONTRIB_DISPLAY: Record<string, {
+  label: string; icon: string; color: string;
+  dextra?: { night_rate: number; sunday_rate: number; night_start: number };
+  far?: { label: string; er_rate: number; emp_rate?: number };
+  formation?: { label: string; er_rate: number; emp_rate?: number };
+  reka?: { label: string; er_rate: number; emp_rate: number };
+  sectoral_lpp?: { label: string; er_rate: number; emp_rate: number };
+  suva_surcharge?: { extra_np_rate: number; extra_p_rate: number };
+  fam_alloc_er_rate?: number;
+  minimum_wage?: number;
+  thirteenth_mandatory?: boolean;
+  legal_alerts: string[];
+}> = {
+  office:          { label:'Bureau / Services',      icon:'💼', color:'#27AE60', legal_alerts:['Durée max 45h/sem (LTr Art.9)', 'HS compensables en temps libre'] },
+  construction:    { label:'Construction / Artisanat', icon:'🏗', color:'#E67E22',
+    far:          { label:'FAR retraite anticipée', er_rate:0.015 },
+    formation:    { label:'Parifonds Construction', er_rate:0.003, emp_rate:0.003 },
+    suva_surcharge: { extra_np_rate:0.012, extra_p_rate:0.010 },
+    fam_alloc_er_rate: 0.014,
+    thirteenth_mandatory: true,
+    minimum_wage: 5500,
+    legal_alerts:['FAR : 1.5% er retraite anticipée à 60', 'Parifonds : 0.3% emp + 0.3% er', 'SUVA Construction taux majoré', '13e obligatoire CN'] },
+  restaurant:      { label:'Hôtellerie / Restauration', icon:'🍽', color:'#C0392B',
+    formation:    { label:'Fonds formation L-GAV', er_rate:0.007, emp_rate:0.003 },
+    reka:         { label:'REKA bons vacances', er_rate:0.010, emp_rate:0.010 },
+    sectoral_lpp: { label:'Caisse LPP sectorielle', er_rate:0.005, emp_rate:0.005 },
+    dextra:       { night_rate:0.20, sunday_rate:0.50, night_start:0 },
+    thirteenth_mandatory: true,
+    minimum_wage: 3931,
+    legal_alerts:['REKA obligatoire : 1% emp + 1% er', 'Fonds L-GAV : 0.7% er + 0.3% emp', '13e : 50% juillet + 50% décembre', 'Nuit dès 00h (+20%, ≠ LTr)'] },
+  industry_mem:    { label:'Industrie / MEM', icon:'⚙️', color:'#2C3E50',
+    formation:    { label:'Fonds formation CCT MEM', er_rate:0.002 },
+    thirteenth_mandatory: true,
+    minimum_wage: 4400,
+    legal_alerts:['13e obligatoire CCT MEM', 'Fonds formation : 0.2% er', '40h/sem standard'] },
+  cleaning:        { label:'Nettoyage / Entretien', icon:'🧹', color:'#16A085',
+    formation:    { label:'Fonds CCT nettoyage', er_rate:0.006, emp_rate:0.002 },
+    dextra:       { night_rate:0.25, sunday_rate:0.50, night_start:20 },
+    minimum_wage: 3700,
+    legal_alerts:['Nuit dès 20h (≠ LTr 23h)', 'Fonds : 0.6% er + 0.2% emp'] },
+  hairdressing:    { label:'Coiffure / Esthétique', icon:'✂️', color:'#8E44AD',
+    formation:    { label:'Fonds formation CCT', er_rate:0.004, emp_rate:0.001 },
+    minimum_wage: 3600,
+    legal_alerts:['Fonds : 0.4% er + 0.1% emp'] },
+  transport:       { label:'Transport / Logistique', icon:'🚛', color:'#D35400',
+    far:          { label:'FAR Transport (ASTAG)', er_rate:0.013 },
+    formation:    { label:'Fonds formation ASTAG', er_rate:0.0015 },
+    thirteenth_mandatory: true,
+    minimum_wage: 4200,
+    legal_alerts:['FAR : ~1.3% er', 'OTR2 : 9h conduite max/jour', '13e obligatoire CCT'] },
+  agriculture:     { label:'Agriculture / Viticulture', icon:'🌾', color:'#2ECC71',
+    fam_alloc_er_rate: 0.018,
+    minimum_wage: 3600,
+    legal_alerts:['Alloc. fam. agricoles (caisse cantonale spécifique)', 'Durée max 48h/sem (dérogation LTr)'] },
+  retail:          { label:'Commerce / Vente', icon:'🛍', color:'#2980B9',
+    minimum_wage: 3400,
+    legal_alerts:['Dimanche : dérogation LTr Art.18 nécessaire', 'Salaires min cantonaux : GE 24.32/h · NE 21.09/h'] },
+  health_social:   { label:'Santé / Social / EMS', icon:'🏥', color:'#E74C3C',
+    formation:    { label:'Fonds formation santé', er_rate:0.0025 },
+    dextra:       { night_rate:0.25, sunday_rate:0.50, night_start:22 },
+    thirteenth_mandatory: true,
+    minimum_wage: 4500,
+    legal_alerts:['13e obligatoire CCT santé', 'Nuit dès 22h (CCT)', 'Fériés payés double'] },
+};
+
+const IS_BAREMES = [
+  { k:'A', l:'A — Célibataire, sans enfant' },
+  { k:'B', l:'B — Marié·e, 1 seul revenu' },
+  { k:'C', l:'C — Marié·e, 2 revenus' },
+  { k:'D', l:'D — Célibataire avec enfants' },
+  { k:'H', l:'H — Ménage monoparental' },
+];
+
+// IS taux simplifiés (frontend — même logique que backend)
+function calcIS(gross: number, canton: string, bareme: string, nbKids = 0) {
+  // Approx par tranches (taux effectifs moyens)
+  const bIdx = {A:0, B:1, C:2, D:3, H:4}[bareme] ?? 0;
+  const TIERS = [
+    [2000,  [0.046,0.000,0.000,0.020,0.010]],
+    [3000,  [0.086,0.040,0.040,0.060,0.050]],
+    [4000,  [0.108,0.060,0.058,0.082,0.072]],
+    [5000,  [0.122,0.080,0.076,0.098,0.088]],
+    [6000,  [0.133,0.095,0.090,0.110,0.100]],
+    [8000,  [0.148,0.112,0.106,0.124,0.114]],
+    [10000, [0.158,0.124,0.117,0.134,0.124]],
+    [15000, [0.172,0.140,0.131,0.148,0.138]],
+    [99999, [0.185,0.155,0.145,0.162,0.152]],
+  ] as [number, number[]][];
+  let rate = TIERS[TIERS.length-1][1][bIdx];
+  for (const [seuil, rates] of TIERS) { if (gross <= seuil) { rate = rates[bIdx]; break; } }
+  if (bareme === 'B' && nbKids > 0) rate = Math.max(0, rate - nbKids * 0.005);
+  return { rate, amount: gross * rate };
+}
+
+// Calcul secteur côté frontend
+function calcSectorContribs(gross: number, sectorKey: string) {
+  const s = SECTOR_CONTRIB_DISPLAY[sectorKey];
+  if (!s) return { empExtra:0, erExtra:0, lines_emp:[] as any[], lines_er:[] as any[] };
+  const capped = Math.min(gross, 12350);
+  let empExtra = 0, erExtra = 0;
+  const lines_emp: any[] = [], lines_er: any[] = [];
+
+  if (s.far) {
+    const er = capped * s.far.er_rate;
+    erExtra += er; lines_er.push({ l: s.far.label + ' (er)', v: er });
+    if (s.far.emp_rate) { const e = capped * s.far.emp_rate; empExtra += e; lines_emp.push({ l: s.far.label + ' (emp)', v: e }); }
+  }
+  if (s.formation) {
+    const er = gross * s.formation.er_rate; erExtra += er; lines_er.push({ l: s.formation.label + ' (er)', v: er });
+    if (s.formation.emp_rate) { const e = gross * s.formation.emp_rate; empExtra += e; lines_emp.push({ l: s.formation.label + ' (emp)', v: e }); }
+  }
+  if (s.reka) {
+    const er = capped * s.reka.er_rate; erExtra += er; lines_er.push({ l: s.reka.label + ' (er)', v: er });
+    const e  = capped * s.reka.emp_rate; empExtra += e; lines_emp.push({ l: s.reka.label + ' (emp)', v: e });
+  }
+  if (s.sectoral_lpp) {
+    const er = gross * s.sectoral_lpp.er_rate; erExtra += er; lines_er.push({ l: s.sectoral_lpp.label + ' (er)', v: er });
+    const e  = gross * s.sectoral_lpp.emp_rate; empExtra += e; lines_emp.push({ l: s.sectoral_lpp.label + ' (emp)', v: e });
+  }
+  if (s.suva_surcharge) {
+    const e = capped * s.suva_surcharge.extra_np_rate; empExtra += e; lines_emp.push({ l: 'SUVA surcharge NP', v: e });
+    const er = capped * s.suva_surcharge.extra_p_rate;  erExtra  += er; lines_er.push({ l: 'SUVA surcharge P',  v: er });
+  }
+  return { empExtra, erExtra, lines_emp, lines_er };
+}
+
 function SalaryCalc() {
   const w = useW();
-  const [gross,   setGross]   = useState(6500);
-  const [age,     setAge]     = useState(38);
-  const [rate,    setRate]    = useState(100);
-  const [hasLaac, setHasLaac] = useState(false);
-  const [hasIjm,  setHasIjm]  = useState(true);
+  const [gross,    setGross]    = useState(6500);
+  const [age,      setAge]      = useState(38);
+  const [rate,     setRate]     = useState(100);
+  const [hasLaac,  setHasLaac]  = useState(false);
+  const [hasIjm,   setHasIjm]   = useState(true);
+  const [sectorKey, setSectorKey] = useState('office');
+  const [hasIS,    setHasIS]    = useState(false);
+  const [isBareme, setIsBareme] = useState('A');
+  const [isKids,   setIsKids]   = useState(0);
+  const [has13th,  setHas13th]  = useState(false);
 
   const r = calcSalary(gross * rate / 100, age, { hasLaac, hasIjm });
   const lppLbl = age < 25 ? "—" : age < 35 ? "7%" : age < 45 ? "10%" : age < 55 ? "15%" : "18%";
   const p = w < 600 ? "14px 12px" : "18px 26px";
 
+  const sectorInfo = SECTOR_CONTRIB_DISPLAY[sectorKey] || SECTOR_CONTRIB_DISPLAY.office;
+  const sc = calcSectorContribs(gross * rate / 100, sectorKey);
+  const isCalc = hasIS ? calcIS(gross * rate / 100, 'JU', isBareme, isKids) : { rate:0, amount:0 };
+  const provision13 = has13th ? (gross * rate / 100) / 12 : 0;
   const rows = [
-    { l:"AVS (5.3%)",   e:r.avs,   er:r.avsEr },
-    { l:"AI (0.7%)",    e:r.ai,    er:r.aiEr },
-    { l:"APG (0.225%)", e:r.apg,   er:r.apgEr },
-    { l:"AC (1.1%)",    e:r.ac,    er:r.acEr },
-    r.ace  > 0 && { l:"ACE solidarité", e:r.ace,  er:0 },
-    r.lpp  > 0 && { l:`LPP (${lppLbl})`, e:r.lpp, er:r.lppEr },
+    { l:"AVS (5.3%)",    e:r.avs,   er:r.avsEr },
+    { l:"AI (0.7%)",     e:r.ai,    er:r.aiEr },
+    { l:"APG (0.225%)",  e:r.apg,   er:r.apgEr },
+    { l:"AC (1.1%)",     e:r.ac,    er:r.acEr },
+    r.ace > 0      && { l:"ACE solidarité",         e:r.ace,    er:0 },
+    r.lpp > 0      && { l:`LPP (${lppLbl})`,        e:r.lpp,    er:r.lppEr },
     { l:"LAA NP (1.3%)", e:r.laaNp, er:0 },
     { l:"LAA P (0.8%)",  e:0,       er:r.laaPEr },
     hasLaac && r.laacBase > 0 && { l:"LAAC complémentaire", e:r.laac, er:r.laacEr },
-    hasIjm && { l:"IJM (0.75%)", e:r.ijm, er:r.ijmEr },
+    hasIjm  && { l:"IJM (0.75%)",            e:r.ijm,   er:r.ijmEr },
+    hasIS   && { l:`IS barème ${isBareme} (${(isCalc.rate*100).toFixed(1)}%)`, e:isCalc.amount, er:0 },
+    has13th && { l:"13e salaire (provision 1/12)", e:provision13, er:0 },
     { l:"Alloc. familiales", e:0, er:r.famEr },
-  ].filter(Boolean);
+    // Cotisations sectorielles
+    ...sc.lines_emp.map(l => ({ l:l.l, e:l.v, er:0 })),
+    ...sc.lines_er.map(l => ({ l:l.l, e:0, er:l.v })),
+  ].filter(Boolean) as {l:string; e:number; er:number}[];
+
+  const totalEmpDeductions = r.totalDed + sc.empExtra + isCalc.amount + provision13;
+  const totalErCharges     = r.totalEr  + sc.erExtra;
+  const netAfterAll        = (gross * rate / 100) - totalEmpDeductions;
 
   return (
     <div style={{ flex:1, overflowY:"auto", paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Calculateur de salaire" sub="Taux officiels 2025"/>
+      <Topbar title="Calculateur de salaire" sub="Taux officiels 2025 · Tous secteurs · IS · 13e"/>
       <div style={{ padding:p, display:"flex", flexDirection:"column", gap:14 }}>
-        <div className="gcalc">
 
+        {/* Sélecteur secteur */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8 }}>
+          {Object.entries(SECTOR_CONTRIB_DISPLAY).map(([k, s]) => (
+            <button key={k} onClick={() => setSectorKey(k)}
+              style={{
+                padding:"10px 12px", borderRadius:9, border:`2px solid ${sectorKey===k ? s.color : 'var(--b2)'}`,
+                background: sectorKey===k ? `${s.color}14` : 'var(--surf)',
+                cursor:"pointer", textAlign:"left", transition:"all .2s",
+              }}>
+              <div style={{ fontSize:18, marginBottom:4 }}>{s.icon}</div>
+              <div style={{ fontSize:10, fontWeight:800, lineHeight:1.3 }}>{s.label}</div>
+              {sectorInfo.minimum_wage && k === sectorKey && (
+                <div style={{ fontSize:8, color:"var(--tm)", marginTop:2 }}>Min CCT : CHF {sectorInfo.minimum_wage.toLocaleString()}</div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Alertes CCT secteur */}
+        {sectorInfo.legal_alerts.length > 0 && (
+          <div style={{ padding:"10px 14px", background:`${sectorInfo.color}0d`, border:`1px solid ${sectorInfo.color}22`,
+            borderRadius:8, fontSize:10, color:sectorInfo.color, display:"flex", gap:8, flexWrap:"wrap" }}>
+            <strong>{sectorInfo.icon} {sectorInfo.label} :</strong>
+            {sectorInfo.legal_alerts.map((a,i) => (
+              <span key={i} style={{ marginRight:8 }}>• {a}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="gcalc">
           {/* ── Left inputs ── */}
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             <div className="card" style={{ padding:18, display:"flex", flexDirection:"column", gap:14 }}>
@@ -556,6 +730,11 @@ function SalaryCalc() {
                   color:"var(--tm)", display:"block", marginBottom:6 }}>Salaire mensuel brut (CHF)</label>
                 <input className="inp mono" type="number" value={gross} onChange={e => setGross(+e.target.value)}
                   style={{ fontSize: w < 480 ? 19 : 23, fontWeight:900, letterSpacing:"-.02em" }}/>
+                {sectorInfo.minimum_wage && (gross * rate / 100) < sectorInfo.minimum_wage && (
+                  <div style={{ marginTop:5, fontSize:10, color:"var(--red)", fontWeight:700 }}>
+                    ⚠ Salaire inférieur au minimum CCT ({sectorInfo.minimum_wage.toLocaleString()} CHF/m)
+                  </div>
+                )}
               </div>
 
               <div>
@@ -574,45 +753,73 @@ function SalaryCalc() {
                 <input type="range" min={10} max={100} step={10} value={rate}
                   onChange={e => setRate(+e.target.value)}
                   style={{ width:"100%", accentColor:"var(--blue)", cursor:"pointer", marginBottom:4 }}/>
-                <ProgBar val={rate} max={100}/>
               </div>
 
-              <Toggle label="IJM — Indemnité journalière" hint="0.75% emp. + 0.75% er." val={hasIjm} set={setHasIjm}/>
-              <Toggle label="LAAC — Assurance complémentaire" hint="Sur salaire > 12'350 CHF/m" val={hasLaac} set={setHasLaac}/>
+              <Toggle label="IJM — Indemnité journalière"       hint="0.75% emp. + 0.75% er."     val={hasIjm}  set={setHasIjm}/>
+              <Toggle label="LAAC — Assurance complémentaire"   hint="Sur salaire > 12'350 CHF/m"  val={hasLaac} set={setHasLaac}/>
+              <Toggle label={`13e salaire${sectorInfo.thirteenth_mandatory ? " ✅ obligatoire CCT" : ""}`}
+                      hint="Provision 1/12 par mois"            val={has13th} set={setHas13th}/>
+            </div>
+
+            {/* Impôt à la source */}
+            <div className="card" style={{ padding:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: hasIS ? 12 : 0 }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:12 }}>🏦 Impôt à la source (IS)</div>
+                  <div style={{ fontSize:10, color:"var(--tm)" }}>Permis B / G / L / F</div>
+                </div>
+                <Toggle label="" hint="" val={hasIS} set={setHasIS}/>
+              </div>
+              {hasIS && (
+                <div style={{ display:"flex", flexDirection:"column", gap:10, paddingTop:12, borderTop:"1px solid var(--b1)" }}>
+                  <div>
+                    <label style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"var(--tm)", display:"block", marginBottom:5 }}>Barème</label>
+                    <select className="inp" value={isBareme} onChange={e => setIsBareme(e.target.value)}>
+                      {IS_BAREMES.map(b => <option key={b.k} value={b.k}>{b.l}</option>)}
+                    </select>
+                  </div>
+                  {(isBareme === 'B' || isBareme === 'D' || isBareme === 'H') && (
+                    <div>
+                      <label style={{ fontSize:9, fontWeight:700, textTransform:"uppercase", color:"var(--tm)", display:"block", marginBottom:5 }}>Nb enfants</label>
+                      <input className="inp" type="number" min={0} max={10} value={isKids} onChange={e => setIsKids(+e.target.value)}/>
+                    </div>
+                  )}
+                  <div style={{ padding:"8px 10px", background:"var(--blued)", borderRadius:7 }}>
+                    <div style={{ fontSize:9, color:"var(--tm)" }}>IS calculé (indicatif)</div>
+                    <div className="mono" style={{ fontSize:15, fontWeight:900, color:"var(--blue)" }}>
+                      CHF {fmt(isCalc.amount)} <span style={{ fontSize:11, fontWeight:500 }}>({(isCalc.rate*100).toFixed(1)}%)</span>
+                    </div>
+                    <div style={{ fontSize:8, color:"var(--tm)", marginTop:3 }}>Vérifier barèmes DFI officiels</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Summary */}
             <div className="card" style={{ padding:18 }}>
-              <div style={{ fontWeight:800, fontSize:13, marginBottom:14 }}>📋 Résumé</div>
+              <div style={{ fontWeight:800, fontSize:13, marginBottom:14 }}>📋 Résumé complet</div>
               {[
-                { l:"Salaire brut",        v:r.gross,     c:"var(--t1)",   big:false },
-                { l:"Déductions employé",  v:-r.totalDed, c:"var(--red)",  big:false },
-                { l:"Net à verser",        v:r.net,       c:"var(--green)",big:true  },
-                { l:"Charges patronales",  v:r.totalEr,   c:"var(--amber)",big:false },
-                { l:"Coût total employeur",v:r.totalCost, c:"var(--t2)",   big:false },
-              ].map((row, i) => (
+                { l:"Salaire brut",            v: gross * rate/100,  c:"var(--t1)",   big:false },
+                sc.empExtra > 0 && { l:`Cotisations CCT emp. (${sectorInfo.icon})`, v:-sc.empExtra,  c:"var(--purple)", big:false },
+                hasIS   && { l:`IS barème ${isBareme}`,              v:-isCalc.amount, c:"var(--blue)", big:false },
+                has13th && { l:"Provision 13e (1/12)",               v:-provision13,  c:"var(--amber)", big:false },
+                { l:"Déductions assurances",   v:-r.totalDed,        c:"var(--red)",  big:false },
+                { l:"Net à verser",            v:netAfterAll,        c:"var(--green)",big:true },
+                { l:"Charges patronales std",  v:r.totalEr,          c:"var(--amber)",big:false },
+                sc.erExtra > 0 && { l:`Charges CCT er. (${sectorInfo.icon})`, v:sc.erExtra, c:"var(--purple)", big:false },
+                { l:"Coût total employeur",    v:gross*rate/100 + totalErCharges, c:"var(--t2)", big:false },
+              ].filter(Boolean).map((row: any, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-                  padding:`${row.big ? 12 : 8}px 0`,
+                  padding:`${row.big ? 11 : 7}px 0`,
                   borderTop: i > 0 ? "1px solid var(--b1)" : undefined,
                   borderBottom: row.big ? "2px solid var(--b2)" : undefined }}>
-                  <span style={{ fontSize: row.big ? 13 : 12, fontWeight: row.big ? 700 : 500, color:"var(--t2)" }}>{row.l}</span>
-                  <span className="mono" style={{ fontSize: row.big ? (w < 480 ? 16 : 20) : 13,
+                  <span style={{ fontSize: row.big ? 13 : 11, fontWeight: row.big ? 700 : 500, color:"var(--t2)" }}>{row.l}</span>
+                  <span className="mono" style={{ fontSize: row.big ? (w<480?16:20) : 12,
                     fontWeight: row.big ? 900 : 700, color:row.c }}>
-                    {row.v < 0 ? "–" : ""} {fmt(Math.abs(row.v))} CHF
+                    {row.v < 0 ? "–" : ""} CHF {fmt(Math.abs(row.v))}
                   </span>
                 </div>
               ))}
-              <div className="g2" style={{ gap:8, marginTop:12 }}>
-                {[
-                  { l:"Taux déductions", v:`${(r.totalDed / r.gross * 100).toFixed(1)}%`, c:"var(--red)" },
-                  { l:"Coût / net",      v:`${(r.totalCost / r.net).toFixed(2)}×`,        c:"var(--blue)" },
-                ].map((m, i) => (
-                  <div key={i} style={{ padding:"10px 11px", background:`${m.c}0d`, borderRadius:8, border:`1px solid ${m.c}22` }}>
-                    <div style={{ fontSize:9, color:"var(--tm)", marginBottom:3 }}>{m.l}</div>
-                    <div className="mono" style={{ fontSize: w < 480 ? 15 : 18, fontWeight:900, color:m.c }}>{m.v}</div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -620,9 +827,13 @@ function SalaryCalc() {
           <div className="card au">
             <div style={{ padding:"14px 18px", borderBottom:"1px solid var(--b1)" }}>
               <div style={{ fontWeight:800, fontSize:13 }}>Décompte complet — charges sociales 2025</div>
-              <div style={{ fontSize:10, color:"var(--tm)", marginTop:2 }}>AVS/AI/APG · AC · ACE · LPP · LAA NP/P · LAAC · IJM</div>
+              <div style={{ fontSize:10, color:"var(--tm)", marginTop:2 }}>
+                AVS/AI/APG · AC · LPP · LAA · LAAC · IJM
+                {sc.lines_emp.length > 0 || sc.lines_er.length > 0 ? ` · ${sectorInfo.icon} CCT ${sectorInfo.label}` : ''}
+                {hasIS ? ` · IS barème ${isBareme}` : ''}
+                {has13th ? ' · 13e' : ''}
+              </div>
             </div>
-            {/* cols: 3 on desktop, 2 on mobile */}
             <div style={{ display:"grid",
               gridTemplateColumns: w < 540 ? "1fr 90px" : "2.4fr 100px 100px",
               gap:8, padding:"8px 16px", background:"var(--surf2)", borderBottom:"1px solid var(--b1)",
@@ -633,8 +844,15 @@ function SalaryCalc() {
               <div key={i} className="row" style={{ display:"grid",
                 gridTemplateColumns: w < 540 ? "1fr 90px" : "2.4fr 100px 100px",
                 gap:8, padding:"10px 16px", alignItems:"center",
+                background: (sc.lines_emp.some(l => l.l === row.l) || sc.lines_er.some(l => l.l === row.l))
+                  ? `${sectorInfo.color}08` : undefined,
                 animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i * 20}ms both` }}>
-                <div style={{ fontSize: w < 480 ? 11 : 12, color:"var(--t2)" }}>{row.l}</div>
+                <div style={{ fontSize: w < 480 ? 11 : 12, color:"var(--t2)", display:"flex", alignItems:"center", gap:5 }}>
+                  {(sc.lines_emp.some(l => l.l === row.l) || sc.lines_er.some(l => l.l === row.l)) && (
+                    <span style={{ fontSize:9 }}>{sectorInfo.icon}</span>
+                  )}
+                  {row.l}
+                </div>
                 <div className="mono" style={{ fontSize: w < 480 ? 12 : 13, fontWeight:800,
                   color: row.e > 0 ? "var(--red)" : "var(--tm)" }}>
                   {row.e > 0 ? `–${fmt(row.e)}` : "—"}
@@ -651,19 +869,19 @@ function SalaryCalc() {
             <div style={{ display:"grid",
               gridTemplateColumns: w < 540 ? "1fr 90px" : "2.4fr 100px 100px",
               gap:8, padding:"12px 16px", background:"var(--surf2)", borderTop:"2px solid var(--b2)", fontWeight:800 }}>
-              <div style={{ fontSize:12 }}>TOTAL</div>
-              <div className="mono" style={{ fontSize:14, color:"var(--red)" }}>–{fmt(r.totalDed)}</div>
-              {w >= 540 && <div className="mono" style={{ fontSize:14, color:"var(--amber)" }}>–{fmt(r.totalEr)}</div>}
+              <div style={{ fontSize:12 }}>TOTAL DÉDUCTIONS</div>
+              <div className="mono" style={{ fontSize:14, color:"var(--red)" }}>–{fmt(totalEmpDeductions)}</div>
+              {w >= 540 && <div className="mono" style={{ fontSize:14, color:"var(--amber)" }}>–{fmt(totalErCharges)}</div>}
             </div>
             {/* Net */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
               padding:"14px 16px", borderTop:"1px solid var(--b1)", background:"rgba(16,185,129,.04)" }}>
               <div>
                 <div style={{ fontWeight:800, fontSize:14, color:"var(--green)" }}>Net à verser</div>
-                <div style={{ fontSize:10, color:"var(--tm)" }}>Brut – déductions employé</div>
+                <div style={{ fontSize:10, color:"var(--tm)" }}>Brut – toutes déductions employé</div>
               </div>
               <div className="mono" style={{ fontSize: w < 480 ? 20 : 26, fontWeight:900, color:"var(--green)" }}>
-                CHF {fmt(r.net)}
+                CHF {fmt(Math.max(0, netAfterAll))}
               </div>
             </div>
           </div>
@@ -672,6 +890,7 @@ function SalaryCalc() {
     </div>
   );
 }
+
 
 /* ═══ PAGE: ABSENCES ════════════════════════════════════ */
 

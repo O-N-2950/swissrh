@@ -1,3 +1,11 @@
+import {
+  calculateSectorContribs, calculateIS, calculate13th,
+  getSectorProfile, type SectorKey, type ISBarem, type ThirteenthMode,
+} from './sector-contributions.js';
+
+export { calculateSectorContribs, calculateIS, calculate13th, getSectorProfile };
+export type { SectorKey, ISBarem, ThirteenthMode };
+
 /**
  * SWISSRH — Moteur de calcul de salaire suisse COMPLET
  * =====================================================================
@@ -113,6 +121,7 @@ export interface EmployeeProfile {
   activityRate: number;         // 10–100%
   weeklyHours: number;
   vacationWeeks: number;        // 4 | 5 | 6
+  canton: string;               // canton de travail
   // Assurances
   hasLpp: boolean;
   hasLaa: boolean;
@@ -120,13 +129,20 @@ export interface EmployeeProfile {
   laacEmpRate?: number;
   laacErRate?: number;
   hasIjm: boolean;
-  // IS
+  // Impôt à la source
   withholdingTax: boolean;
-  whtRate?: number;             // taux IS calculé selon barème
+  isBareme?: ISBarem;
+  isNbChildren?: number;
+  whtRate?: number;
   // Contrat
   hasThirteenth: boolean;
+  thirteenthMode?: ThirteenthMode;
   // Type de salaire
   salaryType: 'monthly' | 'hourly';
+  // Secteur
+  sector?: SectorKey;
+  dextraNightRate?: number;
+  dextraSundayRate?: number;
 }
 
 export interface MonthlyPayInput {
@@ -219,11 +235,22 @@ export interface PayslipResult {
   // ── Coût total employeur
   totalCost: number;  // brut + charges patronales (hors frais)
 
+  // ── Cotisations sectorielles (FAR, Parifonds, REKA, HESTA, etc.)
+  sectorContribEmp:   number;  // total suppléments déductions employé
+  sectorContribEr:    number;  // total suppléments charges patronales
+  sectorLines_emp:    Array<{ label: string; amount: number; rate?: number }>;
+  sectorLines_er:     Array<{ label: string; amount: number; rate?: number }>;
+
+  // ── 13e salaire
+  thirteenth_provision: number;   // provision mensuelle
+  thirteenth_payable:   number;   // montant versé ce mois
+
   // ── Diagnostics
   isAboveAcCeiling:   boolean;
-  isAboveAceCeiling:  boolean; // > 24'700 → plus d'ACE non plus
+  isAboveAceCeiling:  boolean;
   isAboveLaaCeiling:  boolean;
   hasLppDeduction:    boolean;
+  sectorKey:          string;
 }
 
 // ── LPP ──────────────────────────────────────────────────────────────────
@@ -425,10 +452,32 @@ export function calculateMonthlyPay(input: MonthlyPayInput): PayslipResult {
   const laaPEr     = profile.hasLaa  ? Math.min(grossTotal, r.laa_ceiling_monthly) * r.laa_p_rate : 0;
   const laacEr     = laacBase * (profile.laacErRate ?? r.laac.default_er_rate);
   const ijmEr      = profile.hasIjm  ? grossTotal * r.ijm_rate : 0;
-  const famAllocEr = grossTotal * r.fam_alloc_rate;
+  // Allocations familiales (taux sectoriel si défini)
+  const sectorProfileObj = profile.sector ? getSectorProfile(profile.sector) : null;
+  const famAllocRate = sectorProfileObj?.contrib.fam_alloc?.er_rate ?? r.fam_alloc_rate;
+  const famAllocEr   = grossTotal * famAllocRate;
 
   const totalEmployer = avsEr + aiEr + apgEr + acEr + lppEr + laaPEr + laacEr + ijmEr + famAllocEr;
-  const totalCost     = grossTotal + totalEmployer;
+
+  // ── Cotisations sectorielles ──────────────────────────────────────
+  const sectorContrib = sectorProfileObj
+    ? calculateSectorContribs(grossTotal, sectorProfileObj, acBase)
+    : { total_emp_extra: 0, total_er_extra: 0, lines_emp: [], lines_er: [] };
+
+  // IS auto-calculé si barème fourni (overrride whtRate)
+  let finalWht = wht;
+  if (profile.withholdingTax && profile.isBareme && !profile.whtRate) {
+    const isCalc = calculateIS(grossTotal, profile.canton ?? 'JU', profile.isBareme, profile.isNbChildren ?? 0);
+    finalWht = isCalc.amount;
+  }
+
+  // 13e salaire
+  const now13 = new Date();
+  const t13 = profile.hasThirteenth
+    ? calculate13th(grossTotal, profile.thirteenthMode ?? 'monthly_provision', now13.getMonth() + 1, profile.sector ?? 'office')
+    : { provision_monthly: 0, payable_this_month: 0, cumulated_provision: 0 };
+
+  const totalCost = grossTotal + totalEmployer + sectorContrib.total_er_extra;
 
   return {
     grossBase, grossHours, grossExtra25, grossNight, grossSunday,
@@ -436,15 +485,22 @@ export function calculateMonthlyPay(input: MonthlyPayInput): PayslipResult {
     grossTotal, expenseReimbursement: expenseReimburse,
     acBase, aceBase, lppBase, laacBase,
     avs, ai, apg, ac, ace, lpp, lppRate: lppRate / 2, laaNp, laac, ijm,
-    withholdingTax: wht, whtRate: profile.whtRate ?? 0,
+    withholdingTax: finalWht, whtRate: profile.whtRate ?? 0,
     salaryAdvance, wageGarnishment, familyAllowance, totalDeductions,
-    netSalary,
+    netSalary: grossTotal - totalDeductions - sectorContrib.total_emp_extra + expenseReimburse,
     avsEr, aiEr, apgEr, acEr, lppEr, laaPEr, laacEr, ijmEr, famAllocEr,
     totalEmployer, totalCost,
+    sectorContribEmp:  sectorContrib.total_emp_extra,
+    sectorContribEr:   sectorContrib.total_er_extra,
+    sectorLines_emp:   sectorContrib.lines_emp,
+    sectorLines_er:    sectorContrib.lines_er,
+    thirteenth_provision: t13.provision_monthly,
+    thirteenth_payable:   t13.payable_this_month,
     isAboveAcCeiling:  grossTotal > r.ac_ceiling_monthly,
     isAboveAceCeiling: grossTotal > r.ace_ceiling_monthly,
     isAboveLaaCeiling,
     hasLppDeduction,
+    sectorKey: profile.sector ?? 'office',
   };
 }
 
