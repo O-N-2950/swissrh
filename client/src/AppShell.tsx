@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -675,9 +675,81 @@ function SalaryCalc() {
 
 /* ═══ PAGE: ABSENCES ════════════════════════════════════ */
 
+/* ══════════════════════════════════════════════════════════
+   SECTOR PROFILE SYSTEM
+══════════════════════════════════════════════════════════ */
+
+const SECTOR_PROFILES = {
+  restaurant: {
+    label: 'Restauration / Hôtellerie',
+    icon: '🍽',
+    color: '#C0392B',
+    defaults: {
+      contract_type: 'Horaire',
+      weekly_hours: 42,
+      vacation_weeks: 4,
+      has_dextra: true,
+      has_tips: true,
+      cct: 'CCT Hôtellerie-Restauration',
+    },
+    dextra: {
+      night_rate: 0.20,       // CCT art. 11: +20% entre 00h–07h
+      sunday_rate: 0.50,      // CCT art. 10: +50%
+      holiday_rate: 1.00,     // 100% supplément jour férié (en plus salaire)
+      overtime_rate: 0.25,    // +25% dès 1ère heure sup
+    },
+    shifts: ['Matin (06–14h)', 'Midi (10–18h)', 'Soir (16–00h)', 'Nuit (22–06h)', 'Coupure (10–14h / 18–22h)'],
+    alerts: ['Repos hebdomadaire 35h (LTr Art.22)', 'Pause obligatoire >5h30', 'Max 50h/sem autorisé CCT'],
+  },
+  retail: {
+    label: 'Commerce / Vente',
+    icon: '🛍',
+    color: '#2980B9',
+    defaults: { contract_type: 'CDI', weekly_hours: 40, vacation_weeks: 5, has_dextra: false, has_tips: false },
+    dextra: { night_rate: 0.25, sunday_rate: 0.50, holiday_rate: 0.50, overtime_rate: 0.25 },
+    shifts: [],
+    alerts: ['Repos dominical (LTr Art.18)'],
+  },
+  construction: {
+    label: 'Construction / Artisanat',
+    icon: '🏗',
+    color: '#E67E22',
+    defaults: { contract_type: 'CDI', weekly_hours: 41.5, vacation_weeks: 5, has_dextra: false, has_tips: false },
+    dextra: { night_rate: 0.25, sunday_rate: 0.50, holiday_rate: 0.50, overtime_rate: 0.25 },
+    shifts: [],
+    alerts: ['Intempéries: RHT possible (LACI Art.32)', 'Salaire minimum CCT construction'],
+  },
+  office: {
+    label: 'Bureau / Services',
+    icon: '💼',
+    color: '#27AE60',
+    defaults: { contract_type: 'CDI', weekly_hours: 42, vacation_weeks: 5, has_dextra: false, has_tips: false },
+    dextra: { night_rate: 0.25, sunday_rate: 0.50, holiday_rate: 0.50, overtime_rate: 0.25 },
+    shifts: [],
+    alerts: [],
+  },
+};
+
+type SectorKey = keyof typeof SECTOR_PROFILES;
+
+// Context global du secteur (lu depuis company settings)
+const SectorCtx = (typeof window !== 'undefined')
+  ? (window as any).__srhSector as SectorKey || 'office'
+  : 'office';
+
+function useSector(): typeof SECTOR_PROFILES[SectorKey] {
+  const [sector, setSector] = useState<SectorKey>('office');
+  useEffect(() => {
+    apiFetch('/company').then(r => {
+      const s = r.company?.sector as SectorKey;
+      if (s && SECTOR_PROFILES[s]) setSector(s);
+    }).catch(() => {});
+  }, []);
+  return SECTOR_PROFILES[sector];
+}
 
 /* ══════════════════════════════════════════════════════════
-   API CLIENT
+   API CLIENT + HOOKS
 ══════════════════════════════════════════════════════════ */
 const API_BASE = '/api';
 const apiFetch = async (url: string, method = 'GET', body?: any) => {
@@ -691,23 +763,20 @@ const apiFetch = async (url: string, method = 'GET', body?: any) => {
   return data;
 };
 
-/* ══════════════════════════════════════════════════════════
-   HOOK: useApi — chargement API générique
-══════════════════════════════════════════════════════════ */
-function useApi(fetchFn, deps = []) {
-  const [data, setData]   = useState(null);
+function useApi(fetchFn: any, deps: any[] = []) {
+  const [data, setData]   = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const load = () => {
     setLoading(true); setError(null);
-    fetchFn().then(d => { setData(d); setLoading(false); })
-             .catch(e => { setError(e.message); setLoading(false); });
+    fetchFn().then((d: any) => { setData(d); setLoading(false); })
+             .catch((e: any) => { setError(e.message); setLoading(false); });
   };
   useEffect(load, deps);
   return { data, loading, error, reload: load };
 }
 
-function ApiState({ loading, error, children }) {
+function ApiState({ loading, error, children }: any) {
   if (loading) return (
     <div style={{ padding:40, display:'flex', justifyContent:'center' }}>
       <Spinner size={28}/>
@@ -722,59 +791,73 @@ function ApiState({ loading, error, children }) {
   return children;
 }
 
-const fDate = (d) => d ? new Date(d).toLocaleDateString('fr-CH', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—';
-const now = new Date();
-const YEAR = now.getFullYear();
+const fDate = (d: any) => d ? new Date(d).toLocaleDateString('fr-CH', { day:'2-digit', month:'2-digit', year:'2-digit' }) : '—';
+const now  = new Date();
+const YEAR  = now.getFullYear();
 const MONTH = now.getMonth() + 1;
+const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const DAY_SHORT   = ['L','M','M','J','V','S','D'];
 
 /* ══════════════════════════════════════════════════════════
-   PAGE: DASHBOARD (câblé API réelle)
+   DASHBOARD — Actionnable, pas décoratif
 ══════════════════════════════════════════════════════════ */
-
-const ChartTip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{ background:'var(--surf)', border:'1px solid var(--b2)', borderRadius:8,
-      padding:'8px 12px', fontFamily:'var(--mono)', fontSize:11 }}>
-      <div style={{ fontWeight:700, marginBottom:4, fontFamily:'Outfit,sans-serif' }}>{label}</div>
-      {payload.map(p => (
-        <div key={p.dataKey} style={{ color:p.color }}>
-          {p.dataKey === 'brut' ? 'Brut' : 'Net'}: CHF {fmt(p.value, 0)}
-        </div>
-      ))}
-    </div>
-  );
-};
 
 function Dashboard({ user = null }: any) {
   const w = useW();
   const p = w < 600 ? '14px 12px' : '20px 26px';
-  const [hp, setHp] = useState(null);
+  const [hp, setHp] = useState<number | null>(null);
+  const sector = useSector();
 
   const { data: kpi, loading: kLoading } = useApi(() => apiFetch(`/reports/dashboard?year=${YEAR}&month=${MONTH}`));
   const { data: alertsD } = useApi(() => apiFetch('/absences/alerts/all'));
   const { data: vacD }    = useApi(() => apiFetch(`/absences/vacation/balances?year=${YEAR}`));
-  const { data: absD }    = useApi(() => apiFetch('/absences?limit=4'));
+  const { data: absD }    = useApi(() => apiFetch('/absences?status=pending'));
 
-  const kd = kpi?.payroll;
-  const employees = kpi?.employees;
+  const kd  = kpi?.payroll;
+  const emps = kpi?.employees;
+  const alerts   = alertsD?.alerts || [];
+  const pendingAbs = (absD?.absences || []).filter((a: any) => a.status === 'pending');
+  const vac  = (vacD?.balances || []).slice(0, 5);
+
+  // Tâches actionnables du jour
+  const tasks = [
+    pendingAbs.length > 0 && {
+      id: 'abs', icon: '📋', label: `${pendingAbs.length} demande(s) de congés en attente`,
+      action: 'absences', urgency: 'high', detail: pendingAbs.map((a: any) => `${a.first_name} ${a.last_name}`).join(', ')
+    },
+    alerts.length > 0 && {
+      id: 'permits', icon: '🪪', label: `${alerts.length} permis de travail expire bientôt`,
+      action: 'employees', urgency: 'medium', detail: alerts.slice(0,2).map((a: any) => `${a.first_name} ${a.last_name}`).join(', ')
+    },
+    vac.some((v: any) => v.balance_days > 20) && {
+      id: 'vac', icon: '🏖', label: `Solde vacances > 20j pour ${vac.filter((v: any) => v.balance_days > 20).length} employé(s)`,
+      action: 'vacations', urgency: 'low', detail: 'Planifier les congés avant fin d\'année'
+    },
+    new Date().getDate() >= 25 && {
+      id: 'payroll', icon: '💳', label: `Paie de ${MONTH_NAMES[MONTH-1]} — Prête à lancer`,
+      action: 'payroll', urgency: 'high', detail: `${emps?.total ?? 0} collaborateurs`
+    },
+  ].filter(Boolean) as any[];
 
   const pieData = kd ? [
-    { name:'AVS/AI/APG', v: Math.round((kd.totalGross * 0.0853) / (kpi.employees?.total||1)), c:'#3176A6' },
-    { name:'LPP',        v: Math.round((kd.totalGross * 0.050)  / (kpi.employees?.total||1)), c:'#8b5cf6' },
-    { name:'AC/ACE',     v: Math.round((kd.totalGross * 0.011)  / (kpi.employees?.total||1)), c:'#10b981' },
-    { name:'LAA NP',     v: Math.round((kd.totalGross * 0.013)  / (kpi.employees?.total||1)), c:'#f59e0b' },
-    { name:'IJM',        v: Math.round((kd.totalGross * 0.0075) / (kpi.employees?.total||1)), c:'#ef4444' },
+    { name:'AVS/AI/APG', v:Math.round((kd.totalGross||0)*0.0853/Math.max(emps?.total||1,1)), c:'#3176A6' },
+    { name:'LPP',        v:Math.round((kd.totalGross||0)*0.050 /Math.max(emps?.total||1,1)), c:'#8b5cf6' },
+    { name:'AC/ACE',     v:Math.round((kd.totalGross||0)*0.016 /Math.max(emps?.total||1,1)), c:'#10b981' },
+    { name:'LAA NP',     v:Math.round((kd.totalGross||0)*0.013 /Math.max(emps?.total||1,1)), c:'#f59e0b' },
+    { name:'IJM',        v:Math.round((kd.totalGross||0)*0.0075/Math.max(emps?.total||1,1)), c:'#ef4444' },
   ] : [];
 
-  const alerts = alertsD?.alerts || [];
-  const vac    = (vacD?.balances || []).slice(0, 5);
-  const abs    = (absD?.absences || []).slice(0, 4);
+  const URGENCY_STYLE: any = {
+    high:   { bg:'rgba(239,68,68,.08)',   border:'rgba(239,68,68,.2)',   dot:'var(--red)' },
+    medium: { bg:'rgba(245,158,11,.08)',  border:'rgba(245,158,11,.2)',  dot:'var(--amber)' },
+    low:    { bg:'rgba(49,118,166,.08)',  border:'rgba(49,118,166,.2)',  dot:'var(--blue)' },
+  };
 
   return (
     <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Dashboard RH"
-        sub={kLoading ? 'Chargement…' : `${new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})} · ${employees?.total ?? '…'} collaborateurs${user?.companyName ? ` · ${user.companyName}` : ''}`}
+      <Topbar
+        title="Dashboard RH"
+        sub={kLoading ? 'Chargement…' : `${MONTH_NAMES[MONTH-1]} ${YEAR} · ${emps?.total ?? '…'} collaborateurs${user?.companyName ? ` · ${user.companyName}` : ''}${sector.label !== 'Bureau / Services' ? ` · ${sector.icon} ${sector.label}` : ''}`}
         actions={<>
           <button className="btn btn-g" style={{ fontSize:11 }}
             onClick={() => window.open('/api/exports/employees.csv','_blank')}>📤 Export</button>
@@ -782,73 +865,86 @@ function Dashboard({ user = null }: any) {
       />
       <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
 
-        {/* KPIs */}
+        {/* ── Tâches du jour ── */}
+        {tasks.length > 0 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }} className="au">
+            <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:'var(--tm)', marginBottom:2 }}>
+              ⚡ Actions requises aujourd'hui
+            </div>
+            {tasks.map((t, i) => {
+              const s = URGENCY_STYLE[t.urgency];
+              return (
+                <div key={t.id} style={{
+                  display:'flex', alignItems:'center', gap:12, padding:'11px 14px',
+                  background:s.bg, border:`1px solid ${s.border}`,
+                  borderRadius:9, cursor:'pointer',
+                  animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i*60}ms both`,
+                  transition:'transform .15s',
+                }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform='translateX(3px)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform='translateX(0)'}
+                >
+                  <div style={{ width:7, height:7, borderRadius:'50%', background:s.dot, flexShrink:0 }}/>
+                  <span style={{ fontSize:14 }}>{t.icon}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700 }}>{t.label}</div>
+                    {t.detail && <div style={{ fontSize:10, color:'var(--tm)', marginTop:1 }}>{t.detail}</div>}
+                  </div>
+                  <span style={{ fontSize:11, color:'var(--tm)', flexShrink:0 }}>→</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── KPIs ── */}
         <div className="g4 stg">
           <KpiCard label="Masse salariale brute" value={kd?.totalGross ?? 0}
-            sub={`${new Date().toLocaleString('fr-CH',{month:'long'})}`}
-            color="var(--blue)" icon="💰" trend={parseFloat(kd?.trendVsLastMonth ?? '0')} delay={0}/>
+            sub={MONTH_NAMES[MONTH-1]} color="var(--blue)" icon="💰"
+            trend={parseFloat(kd?.trendVsLastMonth ?? '0')} delay={0}/>
           <KpiCard label="Net total versé" value={kd?.totalNet ?? 0}
             sub="ce mois" color="var(--green)" icon="✅" delay={60}/>
           <KpiCard label="Charges patronales" value={kd?.totalEmployerCost ?? 0}
-            sub="≈ 23% brut" color="var(--amber)" icon="🏛" delay={120}/>
-          <KpiCard label="Collaborateurs" value={employees?.total ?? 0}
-            sub={employees?.permitsExpiring ? `${employees.permitsExpiring} alerte(s) permis` : 'RAS'}
+            sub={kd?.totalGross ? `≈ ${((kd.totalEmployerCost/kd.totalGross)*100).toFixed(0)}% brut` : '—'}
+            color="var(--amber)" icon="🏛" delay={120}/>
+          <KpiCard label="Collaborateurs" value={emps?.total ?? 0}
+            sub={alerts.length > 0 ? `${alerts.length} alerte permis` : pendingAbs.length > 0 ? `${pendingAbs.length} congé en attente` : 'RAS'}
             isNum color="var(--purple)" icon="👥" delay={180}/>
         </div>
 
-        {/* Charts */}
-        <div className="g21">
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18 }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>📈 Masse salariale {YEAR}</div>
-            <div style={{ fontSize:10, color:'var(--tm)', marginBottom:12 }}>Brut vs Net · CHF/mois</div>
-            {kLoading ? <Spinner/> : (
-              <ResponsiveContainer width="100%" height={w < 480 ? 150 : 190}>
-                <AreaChart data={[]} margin={{ left:-22, right:4 }}>
-                  <defs>
-                    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3176A6" stopOpacity=".18"/>
-                      <stop offset="100%" stopColor="#3176A6" stopOpacity="0"/>
-                    </linearGradient>
-                    <linearGradient id="gN" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity=".15"/>
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="m" tick={{ fontSize:11, fill:'var(--tm)' }} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{ fontSize:10, fill:'var(--tm)' }} axisLine={false} tickLine={false}
-                    tickFormatter={v=>`${(v/1000).toFixed(0)}k`}/>
-                  <Tooltip content={<ChartTip/>}/>
-                  <Area type="monotone" dataKey="brut" stroke="#3176A6" strokeWidth={2} fill="url(#gB)"/>
-                  <Area type="monotone" dataKey="net"  stroke="#10b981" strokeWidth={2} fill="url(#gN)"/>
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-            <div style={{ fontSize:10, color:'var(--tm)', textAlign:'center', marginTop:4 }}>
-              Données historiques disponibles après 1er mois de paie complet
-            </div>
+        {/* ── Alertes secteur ── */}
+        {sector.alerts.length > 0 && (
+          <div style={{ padding:'10px 14px', background:'rgba(49,118,166,.05)', border:'1px solid rgba(49,118,166,.12)', borderRadius:8, fontSize:11, color:'var(--blue)' }}>
+            <strong>📌 {sector.icon} {sector.cct || 'Rappels légaux'} :</strong>{' '}
+            {sector.alerts.join(' · ')}
           </div>
+        )}
 
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.06s' }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>🧮 Déductions employé</div>
-            <div style={{ fontSize:10, color:'var(--tm)', marginBottom:8 }}>Estimation mois courant</div>
+        {/* ── Charts + Alertes + Absences ── */}
+        <div className="g3">
+          {/* Pie charges */}
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18 }}>
+            <SH>🧮 Déductions par type</SH>
             {pieData.length > 0 ? (
               <>
-                <ResponsiveContainer width="100%" height={w < 480 ? 110 : 130}>
+                <ResponsiveContainer width="100%" height={140}>
                   <PieChart>
                     <Pie data={pieData} cx="50%" cy="50%"
-                      innerRadius={w < 480 ? 28 : 34} outerRadius={w < 480 ? 46 : 56}
+                      innerRadius={38} outerRadius={58}
                       dataKey="v" paddingAngle={2}
-                      onMouseEnter={(_,i) => setHp(i)} onMouseLeave={() => setHp(null)}>
+                      onMouseEnter={(_: any, i: number) => setHp(i)}
+                      onMouseLeave={() => setHp(null)}>
                       {pieData.map((e, i) => (
-                        <Cell key={i} fill={e.c} opacity={hp === null || hp === i ? 1 : .4}
+                        <Cell key={i} fill={e.c}
+                          opacity={hp === null || hp === i ? 1 : .4}
                           strokeWidth={hp === i ? 2 : 0} stroke="var(--surf)"/>
                       ))}
                     </Pie>
-                    <Tooltip formatter={v => [`CHF ${fmt(v, 0)}`]}
+                    <Tooltip formatter={(v: any) => [`CHF ${fmt(v, 0)}`]}
                       contentStyle={{ background:'var(--surf)', border:'1px solid var(--b2)', borderRadius:8, fontFamily:'var(--mono)', fontSize:11 }}/>
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:4 }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                   {pieData.map((d, i) => (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -860,62 +956,815 @@ function Dashboard({ user = null }: any) {
                   ))}
                 </div>
               </>
-            ) : <Spinner/>}
+            ) : kLoading ? <Spinner/> : (
+              <div style={{ padding:20, textAlign:'center', color:'var(--tm)', fontSize:12 }}>
+                Aucune donnée de paie ce mois
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Bottom row */}
-        <div className="g3">
           {/* Alertes */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.10s' }}>
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.05s' }}>
             <SH>🔔 Alertes {alerts.length > 0 && <span className="badge s-rejected" style={{ marginLeft:5 }}>{alerts.length}</span>}</SH>
             {alerts.length === 0 ? (
-              <div style={{ fontSize:12, color:'var(--tm)', padding:'8px 0' }}>✅ Aucune alerte</div>
-            ) : alerts.slice(0,4).map((a, i) => (
+              <div style={{ padding:'16px 0', textAlign:'center', fontSize:12, color:'var(--tm)' }}>✅ Aucune alerte</div>
+            ) : alerts.slice(0,4).map((a: any, i: number) => (
               <div key={i} style={{ display:'flex', gap:8, padding:'8px 10px', marginBottom:6,
                 background:'var(--amberd)', borderRadius:7, border:'1px solid rgba(245,158,11,.2)' }}>
                 <span style={{ fontSize:12, flexShrink:0 }}>🪪</span>
-                <span style={{ fontSize:11, color:'var(--t2)', lineHeight:1.4 }}>
-                  {a.first_name} {a.last_name} — Permis {a.permit_type} expire dans {a.days_remaining}j
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Absences récentes */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.15s' }}>
-            <SH>🗓 Absences récentes</SH>
-            {abs.length === 0 ? <div style={{ fontSize:12, color:'var(--tm)' }}>Aucune absence</div>
-            : abs.map((a, i) => (
-              <div key={i} className="row" style={{ display:'flex', justifyContent:'space-between',
-                alignItems:'center', padding:'8px 4px', gap:8 }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:700 }}>{a.employee_name || `${a.first_name} ${a.last_name}`}</div>
-                  <div style={{ fontSize:10, color:'var(--tm)' }}>{a.absence_type} · {a.days_count}j</div>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700 }}>{a.first_name} {a.last_name}</div>
+                  <div style={{ fontSize:10, color:'var(--tm)' }}>Permis {a.permit_type} · expire dans {a.days_remaining}j</div>
                 </div>
-                <StatusBadge s={a.status}/>
               </div>
             ))}
+
+            {pendingAbs.length > 0 && (
+              <div style={{ marginTop:8, borderTop:'1px solid var(--b1)', paddingTop:8 }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', color:'var(--tm)', marginBottom:6 }}>En attente</div>
+                {pendingAbs.slice(0,3).map((a: any, i: number) => (
+                  <div key={i} style={{ display:'flex', gap:8, padding:'6px 10px', marginBottom:4,
+                    background:'var(--blued)', borderRadius:7 }}>
+                    <span style={{ fontSize:11 }}>📋</span>
+                    <div style={{ fontSize:11, color:'var(--t2)' }}>
+                      <strong>{a.first_name}</strong> · {a.days_count}j ·
+                      {fDate(a.start_date)}–{fDate(a.end_date)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Soldes vacances */}
-          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.20s' }}>
+          <div className="card au" style={{ padding: w < 480 ? 14 : 18, animationDelay:'.10s' }}>
             <SH>🏖 Soldes vacances</SH>
             {vac.length === 0 ? <div style={{ fontSize:12, color:'var(--tm)' }}>Aucune donnée</div>
-            : vac.map((v, i) => (
+            : vac.map((v: any, i: number) => (
               <div key={i} style={{ marginBottom:10 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:3 }}>
                   <span style={{ fontWeight:600 }}>{v.first_name} {v.last_name?.charAt(0)}.</span>
-                  <span className="mono" style={{ color: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)', fontWeight:700 }}>
-                    {v.balance_days}j
-                  </span>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    {v.balance_days > 20 && <span style={{ fontSize:9, color:'var(--amber)', fontWeight:700 }}>⚠</span>}
+                    <span className="mono" style={{ color: v.balance_days < 5 ? 'var(--red)' : v.balance_days > 20 ? 'var(--amber)' : 'var(--blue)', fontWeight:700 }}>
+                      {v.balance_days}j
+                    </span>
+                  </div>
                 </div>
-                <div className="prog"><div className="prog-f" style={{ width:`${Math.min(100,(v.taken_days/v.entitled_days)*100)||0}%`, background: v.balance_days < 5 ? 'var(--red)' : 'var(--blue)' }}/></div>
+                <div className="prog">
+                  <div className="prog-f" style={{
+                    width:`${Math.min(100,(v.taken_days/v.entitled_days)*100)||0}%`,
+                    background: v.balance_days < 5 ? 'var(--red)' : v.balance_days > 20 ? 'var(--amber)' : 'var(--blue)'
+                  }}/>
+                </div>
+                <div style={{ fontSize:9, color:'var(--tm)', marginTop:1 }}>{v.taken_days}/{v.entitled_days}j pris</div>
               </div>
             ))}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   TIME TRACKING V2 — DEXTRA + Shifts + Auto-calcul
+══════════════════════════════════════════════════════════ */
+
+function dextraLabel(type: string) {
+  return { night:'🌙 Nuit (+20%)', sunday:'☀ Dimanche (+50%)', holiday:'🎉 Férié (+100%)', overtime:'⏱ Suppl. (+25%)' }[type] || type;
+}
+
+function calcDextra(entries: any[], sector: any) {
+  return entries.reduce((acc, e) => {
+    const h = e.worked_hours || 0;
+    const hn = e.night_hours || 0;
+    const hs = e.sunday_hours || 0;
+    const hh = e.holiday_hours || 0;
+    const ho = e.overtime_hours || 0;
+    const base = e.hourly_rate || 0;
+    const d = sector.dextra;
+    return {
+      ...acc,
+      normal:   acc.normal   + (h - hn - hs - hh - ho) * base,
+      night:    acc.night    + hn * base * d.night_rate,
+      sunday:   acc.sunday   + hs * base * d.sunday_rate,
+      holiday:  acc.holiday  + hh * base * d.holiday_rate,
+      overtime: acc.overtime + ho * base * d.overtime_rate,
+      hours:    acc.hours    + h,
+    };
+  }, { normal:0, night:0, sunday:0, holiday:0, overtime:0, hours:0 });
+}
+
+function WeekGrid({ entries, onEntry, sector, empData }: any) {
+  // Build week grid (current week, Mon–Sun)
+  const [weekOffset, setWeekOffset] = useState(0);
+  const startOfWeek = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay() + 1 + weekOffset * 7);
+    d.setHours(0,0,0,0);
+    return d;
+  }, [weekOffset]);
+
+  const days = Array.from({length:7}, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    return d;
+  });
+
+  const entryMap: any = {};
+  (entries || []).forEach((e: any) => {
+    const k = e.work_date?.slice(0,10);
+    if (k) entryMap[k] = e;
+  });
+
+  const dayNames = ['LUN','MAR','MER','JEU','VEN','SAM','DIM'];
+  const isSunday = (d: Date) => d.getDay() === 0;
+
+  const weekStr = `${days[0].toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit'})} – ${days[6].toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+
+  const totalH = days.reduce((s, d) => {
+    const k = d.toISOString().slice(0,10);
+    return s + (entryMap[k]?.worked_hours || 0);
+  }, 0);
+  const targetH = (empData?.weekly_hours || 42);
+
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+        <button className="btn btn-g" style={{ padding:'5px 10px' }} onClick={() => setWeekOffset(o => o-1)}>←</button>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontWeight:700, fontSize:13 }}>Semaine {weekStr}</div>
+          <div style={{ fontSize:10, color:'var(--tm)' }}>
+            {hToHMM(totalH)} / {hToHMM(targetH)}
+            <span style={{ marginLeft:8, color: totalH >= targetH ? 'var(--green)' : 'var(--red)', fontWeight:700 }}>
+              {totalH >= targetH ? `+${hToHMM(totalH-targetH)}` : `-${hToHMM(targetH-totalH)}`}
+            </span>
+          </div>
+        </div>
+        <button className="btn btn-g" style={{ padding:'5px 10px' }} onClick={() => setWeekOffset(o => o+1)}>→</button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:6 }}>
+        {days.map((day, di) => {
+          const iso = day.toISOString().slice(0,10);
+          const e   = entryMap[iso];
+          const isToday = iso === new Date().toISOString().slice(0,10);
+          const isSun   = isSunday(day);
+          const isPast  = day < now;
+
+          return (
+            <div key={di}
+              style={{
+                borderRadius:9, border:`1px solid ${isToday ? 'var(--blue)' : isSun ? 'rgba(239,68,68,.2)' : 'var(--b2)'}`,
+                background: isToday ? 'var(--blued)' : isSun ? 'rgba(239,68,68,.04)' : 'var(--surf)',
+                padding:'8px 6px', cursor:'pointer', transition:'all .15s',
+                minHeight:90, display:'flex', flexDirection:'column', gap:4
+              }}
+              onClick={() => onEntry(day, e)}
+              onMouseEnter={el => (el.currentTarget as HTMLElement).style.boxShadow='0 2px 12px rgba(0,0,0,.08)'}
+              onMouseLeave={el => (el.currentTarget as HTMLElement).style.boxShadow='none'}
+            >
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:8, fontWeight:800, letterSpacing:'.05em', color: isSun ? 'var(--red)' : 'var(--tm)' }}>{dayNames[di]}</span>
+                <span style={{ fontSize:11, fontWeight:700, color: isToday ? 'var(--blue)' : 'var(--t2)' }}>{day.getDate()}</span>
+              </div>
+
+              {e ? (
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:900, color:'var(--blue)', fontFamily:'var(--mono)' }}>
+                    {hToHMM(e.worked_hours||0)}
+                  </div>
+                  <div style={{ fontSize:9, color:'var(--tm)' }}>{e.start_time}–{e.end_time}</div>
+                  {/* DEXTRA badges */}
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:2, marginTop:3 }}>
+                    {(e.night_hours||0) > 0 && <span style={{ fontSize:7, padding:'1px 4px', borderRadius:3, background:'rgba(139,92,246,.15)', color:'#7c3aed', fontWeight:800 }}>🌙{hToHMM(e.night_hours)}</span>}
+                    {(e.sunday_hours||0) > 0 && <span style={{ fontSize:7, padding:'1px 4px', borderRadius:3, background:'rgba(239,68,68,.12)', color:'var(--red)', fontWeight:800 }}>☀{hToHMM(e.sunday_hours)}</span>}
+                    {(e.overtime_hours||0) > 0 && <span style={{ fontSize:7, padding:'1px 4px', borderRadius:3, background:'rgba(245,158,11,.15)', color:'var(--amber)', fontWeight:800 }}>⏱+{hToHMM(e.overtime_hours)}</span>}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <span style={{ fontSize:16, color:'var(--b2)' }}>+</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TimeEntryModal({ day, existing, empData, sector, onClose, onSaved }: any) {
+  const dateStr = day.toISOString().slice(0,10);
+  const dayOfWeek = day.getDay();
+  const isSun     = dayOfWeek === 0;
+  const isSat     = dayOfWeek === 6;
+
+  const [form, setForm] = useState({
+    start_time:   existing?.start_time   || (isSun||isSat ? '08:00' : '08:00'),
+    end_time:     existing?.end_time     || (isSun||isSat ? '17:00' : '17:00'),
+    break_minutes: existing?.break_minutes ?? 30,
+    notes:        existing?.notes        || '',
+    shift_type:   existing?.shift_type   || 'normal',
+    tips_amount:  existing?.tips_amount  || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (k: string, v: any) => setForm(f => ({...f, [k]: v}));
+
+  // Auto-calcul DEXTRA
+  const calc = useMemo(() => {
+    const toH = (t: string) => {
+      const [h,m] = t.split(':').map(Number);
+      return h + (m||0)/60;
+    };
+    const start = toH(form.start_time);
+    let end   = toH(form.end_time);
+    if (end <= start) end += 24; // nuit
+    const worked = Math.max(0, end - start - form.break_minutes/60);
+    const targetH = (empData?.weekly_hours || 42) / 5;
+
+    // DEXTRA calculation
+    let nightH = 0, sundayH = 0, overtimeH = 0, holidayH = 0;
+
+    if (isSun) {
+      // Tout est dimanche
+      sundayH = worked;
+    } else if (sector.defaults.has_dextra) {
+      // Nuit : 00h-07h (CCT restauration) ou 23h-06h (LTr)
+      const nightStart = form.shift_type === 'night' ? 22 : 23;
+      const nightEnd   = 7;
+      // Count hours in night range
+      for (let h = 0; h < worked; h++) {
+        const cur = (start + h) % 24;
+        if (cur >= nightStart || cur < nightEnd) nightH++;
+      }
+    }
+
+    if (worked > targetH) overtimeH = worked - targetH;
+
+    return { worked, nightH: Math.round(nightH*4)/4, sundayH, overtimeH: Math.round(overtimeH*4)/4, holidayH };
+  }, [form.start_time, form.end_time, form.break_minutes, form.shift_type, isSun, sector, empData]);
+
+  const d = sector.dextra;
+  const hr = empData?.salary_amount || 0; // hourly rate
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = {
+        employee_id: empData?.id, work_date: dateStr,
+        start_time: form.start_time, end_time: form.end_time,
+        break_minutes: form.break_minutes,
+        worked_hours: calc.worked,
+        night_hours: calc.nightH, sunday_hours: calc.sundayH,
+        holiday_hours: calc.holidayH, overtime_hours: calc.overtimeH,
+        notes: form.notes, shift_type: form.shift_type,
+        tips_amount: form.tips_amount ? parseFloat(form.tips_amount) : null,
+        status: 'pending',
+      };
+      if (existing?.id) await apiFetch(`/time/${existing.id}`, 'PUT', body);
+      else              await apiFetch('/time', 'POST', body);
+      onSaved();
+    } catch(e: any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const SHIFT_TYPES = sector.shifts.length > 0
+    ? [['normal','Normal'], ...sector.shifts.map((s: string, i: number) => [`shift_${i}`, s])]
+    : [['normal','Normal']];
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24, maxWidth:460 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:16 }}>
+              {day.toLocaleDateString('fr-CH',{weekday:'long',day:'numeric',month:'long'})}
+              {isSun && <span style={{ marginLeft:8, fontSize:11, background:'rgba(239,68,68,.12)', color:'var(--red)', padding:'2px 8px', borderRadius:5, fontWeight:700 }}>DIMANCHE</span>}
+            </div>
+            {isSun && <div style={{ fontSize:11, color:'var(--red)', marginTop:3 }}>Supplément +{Math.round(d.sunday_rate*100)}% automatique (LTr Art.19)</div>}
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+
+        {/* Shift selector (restaurant) */}
+        {sector.shifts.length > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:6 }}>Type de shift</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {SHIFT_TYPES.map(([v,l]: any) => (
+                <button key={v} onClick={() => {
+                  set('shift_type', v);
+                  // Auto-fill times
+                  const presets: any = {
+                    'shift_0': ['06:00','14:00'], 'shift_1': ['10:00','18:00'],
+                    'shift_2': ['16:00','00:00'], 'shift_3': ['22:00','06:00'],
+                    'shift_4': ['10:00','22:00'],
+                  };
+                  if (presets[v]) { set('start_time', presets[v][0]); set('end_time', presets[v][1]); }
+                }} className={`btn ${form.shift_type === v ? 'btn-p' : 'btn-g'}`} style={{ fontSize:11 }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="g2" style={{ gap:12, marginBottom:14 }}>
+          {[['Arrivée','start_time'],['Départ','end_time']].map(([lbl,k]) => (
+            <div key={k}>
+              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{lbl}</label>
+              <input className="inp mono" type="time" value={(form as any)[k]} onChange={e => set(k, e.target.value)}/>
+            </div>
+          ))}
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Pause (min)</label>
+            <input className="inp mono" type="number" min="0" max="120" step="5" value={form.break_minutes} onChange={e => set('break_minutes', +e.target.value)}/>
+          </div>
+          {sector.defaults.has_tips && (
+            <div>
+              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Pourboires CHF</label>
+              <input className="inp mono" type="number" min="0" step="0.05" placeholder="0.00" value={form.tips_amount} onChange={e => set('tips_amount', e.target.value)}/>
+            </div>
+          )}
+        </div>
+
+        {/* DEXTRA recap auto */}
+        <div style={{ background:'var(--surf2)', borderRadius:9, padding:'12px 14px', marginBottom:14 }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', marginBottom:8 }}>Récap automatique</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {[
+              { lbl:'Total travaillé', v:hToHMM(calc.worked), c:'var(--blue)', bold:true },
+              calc.nightH > 0   && { lbl:`Heures nuit (+${Math.round(d.night_rate*100)}%)`,    v:hToHMM(calc.nightH),    c:'#7c3aed' },
+              calc.sundayH > 0  && { lbl:`Heures dim. (+${Math.round(d.sunday_rate*100)}%)`,  v:hToHMM(calc.sundayH),   c:'var(--red)' },
+              calc.overtimeH > 0 && { lbl:`Heures suppl. (+25%)`, v:hToHMM(calc.overtimeH), c:'var(--amber)' },
+            ].filter(Boolean).map((item: any, i) => (
+              <div key={i} style={{ background:'var(--surf)', borderRadius:6, padding:'6px 10px', border:'1px solid var(--b1)' }}>
+                <div style={{ fontSize:9, color:'var(--tm)' }}>{item.lbl}</div>
+                <div className="mono" style={{ fontSize:13, fontWeight:900, color:item.c }}>{item.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {(calc.nightH > 0 || calc.sundayH > 0 || calc.overtimeH > 0) && hr > 0 && (
+            <div style={{ marginTop:8, fontSize:11, color:'var(--green)', fontWeight:700 }}>
+              + CHF {fmt((calc.nightH*hr*d.night_rate + calc.sundayH*hr*d.sunday_rate + calc.overtimeH*hr*d.overtime_rate), 2)} de suppléments DEXTRA
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Remarque</label>
+          <input className="inp" placeholder="Optionnel…" value={form.notes} onChange={e => set('notes', e.target.value)}/>
+        </div>
+
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+          <button className="btn btn-g" onClick={onClose}>Annuler</button>
+          <button className="btn btn-p" onClick={save} disabled={saving}>
+            {saving ? <Spinner size={14}/> : (existing ? '💾 Modifier' : '✅ Enregistrer')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimeTracking() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [empId, setEmpId]   = useState('');
+  const [modal, setModal]   = useState<{day: Date, existing: any}|null>(null);
+  const sector = useSector();
+
+  const { data: empD } = useApi(() => apiFetch('/employees'));
+  const employees = empD?.employees || [];
+
+  const { data: timeD, reload } = useApi(
+    () => empId ? apiFetch(`/time/summary/${empId}?year=${YEAR}&month=${MONTH}`) : Promise.resolve(null),
+    [empId]
+  );
+
+  useEffect(() => { if (employees.length > 0 && !empId) setEmpId(String(employees[0].id)); }, [employees]);
+
+  const emp     = employees.find((e: any) => String(e.id) === String(empId));
+  const summary = timeD?.summary;
+  const entries = timeD?.entries || [];
+
+  const dextraSummary = useMemo(() => calcDextra(entries, sector), [entries, sector]);
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Pointage & Présences"
+        sub={`LTr Art.15 · ${sector.defaults.has_dextra ? `DEXTRA · ${sector.icon}` : 'Heures de travail'}`}
+      />
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Sélecteur employé */}
+        <div className="card" style={{ padding:14, display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:200 }}>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Collaborateur</label>
+            <select className="inp" value={empId} onChange={e => setEmpId(e.target.value)}>
+              {employees.map((e: any) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} · {e.salary_type==='hourly'?`${fmt(e.salary_amount,2)} CHF/h`:`${fmt(e.salary_amount,0)} CHF/m`}</option>)}
+            </select>
+          </div>
+          {emp && (
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {[
+                { l:'Taux', v:`${emp.activity_rate}%`, c:'var(--blue)' },
+                { l:'Heures/sem', v:`${emp.weekly_hours}h`, c:'var(--purple)' },
+                summary && { l:'Balance', v:(summary.balance_hours>=0?'+':'')+hToHMM(summary.balance_hours||0), c:summary.balance_hours>=0?'var(--green)':'var(--red)' },
+              ].filter(Boolean).map((item: any,i) => (
+                <div key={i} style={{ padding:'6px 10px', background:'var(--surf2)', borderRadius:7 }}>
+                  <div style={{ fontSize:9, color:'var(--tm)', fontWeight:700 }}>{item.l}</div>
+                  <div className="mono" style={{ fontSize:13, fontWeight:900, color:item.c }}>{item.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* DEXTRA summary si activé */}
+        {sector.defaults.has_dextra && dextraSummary.hours > 0 && (
+          <div style={{ background:'linear-gradient(135deg,rgba(139,92,246,.08),rgba(49,118,166,.06))',
+            border:'1px solid rgba(139,92,246,.15)', borderRadius:10, padding:'12px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'.06em', color:'#7c3aed', marginBottom:8 }}>
+              {sector.icon} DEXTRA — Suppléments du mois
+            </div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              {[
+                { l:'Heures normales', v:hToHMM(dextraSummary.hours), c:'var(--blue)' },
+                dextraSummary.night > 0   && { l:`Nuit (+${Math.round(sector.dextra.night_rate*100)}%)`,   v:fmt(dextraSummary.night,2)+' CHF',   c:'#7c3aed' },
+                dextraSummary.sunday > 0  && { l:`Dimanche (+${Math.round(sector.dextra.sunday_rate*100)}%)`, v:fmt(dextraSummary.sunday,2)+' CHF',  c:'var(--red)' },
+                dextraSummary.overtime > 0 && { l:'Heures suppl.',                                           v:fmt(dextraSummary.overtime,2)+' CHF', c:'var(--amber)' },
+              ].filter(Boolean).map((item: any,i) => (
+                <div key={i} style={{ padding:'6px 12px', background:'rgba(255,255,255,.7)', borderRadius:7, backdropFilter:'blur(4px)' }}>
+                  <div style={{ fontSize:9, color:'var(--tm)' }}>{item.l}</div>
+                  <div className="mono" style={{ fontSize:13, fontWeight:900, color:item.c }}>{item.v}</div>
+                </div>
+              ))}
+              {(dextraSummary.night+dextraSummary.sunday+dextraSummary.overtime) > 0 && (
+                <div style={{ padding:'6px 12px', background:'rgba(16,185,129,.1)', borderRadius:7, border:'1px solid rgba(16,185,129,.2)' }}>
+                  <div style={{ fontSize:9, color:'var(--tm)' }}>Total suppléments</div>
+                  <div className="mono" style={{ fontSize:13, fontWeight:900, color:'var(--green)' }}>
+                    + CHF {fmt(dextraSummary.night+dextraSummary.sunday+dextraSummary.overtime, 2)}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Grille visuelle */}
+        <div className="card" style={{ padding:16 }}>
+          <SH>📅 Grille de présence</SH>
+          <WeekGrid entries={entries} sector={sector} empData={emp}
+            onEntry={(day: Date, existing: any) => setModal({day, existing})}/>
+        </div>
+
+        {/* Mentions légales */}
+        <div style={{ padding:'10px 14px', background:'var(--surf2)', borderRadius:8, fontSize:10, color:'var(--tm)' }}>
+          <strong>⚖️ Rappels LTr :</strong> Pause {'>'} 5h30 = 15min · {'>'} 7h = 30min · {'>'} 9h = 60min · Repos hebdo = 35h consécutives · Max 45h/semaine (Art.9)
+          {sector.defaults.has_dextra && ` · ${sector.icon} Suppléments CCT applicables`}
+        </div>
+      </div>
+
+      {modal && (
+        <TimeEntryModal
+          day={modal.day} existing={modal.existing}
+          empData={emp} sector={sector}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAYROLL RUN — Lancer la paie (3 étapes)
+══════════════════════════════════════════════════════════ */
+
+function PayrollRunModal({ month, year, employees, sector, onClose, onDone }: any) {
+  const [step, setStep] = useState<'preview'|'confirm'|'done'>('preview');
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors]   = useState<string[]>([]);
+  const [progress, setProgress] = useState(0);
+
+  // Step 1: Preview calculs
+  useEffect(() => {
+    setLoading(true);
+    Promise.all(
+      employees
+        .filter((e: any) => e.salary_amount > 0)
+        .map(async (emp: any) => {
+          try {
+            const res = await apiFetch('/salary/calculate', 'POST', {
+              grossSalary:  emp.salary_type === 'monthly' ? emp.salary_amount : emp.salary_amount * emp.weekly_hours * 4.33,
+              age:          emp.age || 35,
+              activityRate: emp.activity_rate,
+              hasLaac:      sector.label === 'Restauration / Hôtellerie',
+              hasIjm:       true,
+            });
+            return { ...emp, calc: res.result, ok: true };
+          } catch(e: any) {
+            return { ...emp, error: e.message, ok: false };
+          }
+        })
+    ).then(r => { setResults(r); setLoading(false); });
+  }, []);
+
+  const totalGross = results.filter(r=>r.ok).reduce((s,r) => s + (r.calc?.grossTotal||0), 0);
+  const totalNet   = results.filter(r=>r.ok).reduce((s,r) => s + (r.calc?.netSalary||0), 0);
+  const totalCost  = results.filter(r=>r.ok).reduce((s,r) => s + (r.calc?.totalCost||0), 0);
+
+  // Step 2: Validate & save all payslips
+  const runPayroll = async () => {
+    setStep('confirm');
+    setLoading(true);
+    const errs: string[] = [];
+    let done = 0;
+
+    for (const r of results.filter(r => r.ok)) {
+      try {
+        await apiFetch('/salary/payslip', 'POST', {
+          employeeId: r.id, periodYear: year, periodMonth: month,
+          grossSalary: r.calc.grossTotal,
+          age: r.age || 35,
+          activityRate: r.activity_rate,
+          hasLaac: sector.label === 'Restauration / Hôtellerie',
+          hasIjm: true,
+        });
+        done++;
+        setProgress(Math.round((done / results.filter(r=>r.ok).length) * 100));
+      } catch(e: any) {
+        errs.push(`${r.first_name} ${r.last_name}: ${e.message}`);
+      }
+    }
+    setErrors(errs);
+    setLoading(false);
+    setStep('done');
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && step === 'done' && onClose()}>
+      <div className="modal" style={{ padding:28, maxWidth:600 }}>
+        {/* Header */}
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:18 }}>🚀 Lancer la paie</div>
+            <div style={{ fontSize:12, color:'var(--tm)' }}>{MONTH_NAMES[month-1]} {year} · {results.filter(r=>r.ok).length} bulletins</div>
+          </div>
+          {step === 'done' && <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>}
+        </div>
+
+        {/* Steps indicator */}
+        <div style={{ display:'flex', gap:4, marginBottom:20 }}>
+          {[['preview','1. Aperçu'],['confirm','2. Lancement'],['done','3. Terminé']].map(([s,l], i) => (
+            <div key={s} style={{ flex:1, height:4, borderRadius:2,
+              background: ['preview','confirm','done'].indexOf(step) >= i ? 'var(--blue)' : 'var(--surf2)',
+              transition:'background .3s' }}/>
+          ))}
+        </div>
+
+        {step === 'preview' && (
+          <>
+            {loading ? (
+              <div style={{ padding:40, textAlign:'center' }}>
+                <Spinner size={28}/>
+                <div style={{ fontSize:12, color:'var(--tm)', marginTop:12 }}>Calcul en cours…</div>
+              </div>
+            ) : (
+              <>
+                {/* Summary KPIs */}
+                <div className="g3" style={{ marginBottom:16 }}>
+                  {[
+                    { l:'Masse brute totale', v:fCHF(totalGross), c:'var(--blue)' },
+                    { l:'Net total à verser', v:fCHF(totalNet),   c:'var(--green)' },
+                    { l:'Coût total employeur', v:fCHF(totalCost), c:'var(--amber)' },
+                  ].map((k,i) => (
+                    <div key={i} style={{ padding:'12px 14px', background:'var(--surf2)', borderRadius:9 }}>
+                      <div style={{ fontSize:10, color:'var(--tm)', fontWeight:700 }}>{k.l}</div>
+                      <div className="mono" style={{ fontSize:16, fontWeight:900, color:k.c, marginTop:4 }}>{k.v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Per-employee preview */}
+                <div style={{ maxHeight:260, overflowY:'auto', border:'1px solid var(--b1)', borderRadius:8 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr',
+                    gap:8, padding:'7px 12px', background:'var(--surf2)',
+                    fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--tm)' }}>
+                    {['Employé','Brut','Net','Charges er.'].map(h => <div key={h}>{h}</div>)}
+                  </div>
+                  {results.map((r, i) => (
+                    <div key={i} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr',
+                      gap:8, padding:'9px 12px', borderTop:'1px solid var(--b1)',
+                      background: !r.ok ? 'rgba(239,68,68,.05)' : undefined }}>
+                      <div style={{ fontWeight:700, fontSize:12 }}>
+                        {r.first_name} {r.last_name}
+                        {!r.ok && <span style={{ color:'var(--red)', fontSize:10 }}> ⚠ {r.error}</span>}
+                      </div>
+                      {r.ok ? (
+                        <>
+                          <div className="mono" style={{ fontWeight:800, color:'var(--blue)', fontSize:12 }}>{fCHF(r.calc.grossTotal)}</div>
+                          <div className="mono" style={{ fontWeight:800, color:'var(--green)', fontSize:12 }}>{fCHF(r.calc.netSalary)}</div>
+                          <div className="mono" style={{ color:'var(--amber)', fontSize:12 }}>{fCHF(r.calc.totalEmployer)}</div>
+                        </>
+                      ) : <div/> }
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop:16, padding:'10px 14px', background:'var(--blued)', borderRadius:8, fontSize:11, color:'var(--blue)' }}>
+                  ℹ Les bulletins PDF seront générés et accessibles individuellement après validation.
+                </div>
+
+                <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
+                  <button className="btn btn-g" onClick={onClose}>Annuler</button>
+                  <button className="btn btn-p" onClick={runPayroll}
+                    style={{ background:'var(--green)' }}>
+                    ✅ Valider et générer {results.filter(r=>r.ok).length} bulletins
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {step === 'confirm' && (
+          <div style={{ padding:32, textAlign:'center' }}>
+            <Spinner size={36}/>
+            <div style={{ fontWeight:700, fontSize:16, marginTop:16, marginBottom:8 }}>Génération en cours…</div>
+            <div style={{ height:6, background:'var(--surf2)', borderRadius:3, marginBottom:8 }}>
+              <div style={{ height:'100%', width:`${progress}%`, background:'var(--blue)', borderRadius:3, transition:'width .3s' }}/>
+            </div>
+            <div style={{ fontSize:12, color:'var(--tm)' }}>{progress}% · {Math.round(progress/100*results.filter(r=>r.ok).length)} / {results.filter(r=>r.ok).length} bulletins</div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div style={{ textAlign:'center', padding:'16px 0' }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🎉</div>
+            <div style={{ fontWeight:800, fontSize:18, marginBottom:6 }}>Paie lancée avec succès !</div>
+            <div style={{ fontSize:13, color:'var(--tm)', marginBottom:16 }}>
+              {results.filter(r=>r.ok).length} bulletins générés pour {MONTH_NAMES[month-1]} {year}
+            </div>
+            {errors.length > 0 && (
+              <div style={{ background:'var(--redd)', borderRadius:8, padding:'10px 14px', marginBottom:16, textAlign:'left' }}>
+                <div style={{ fontWeight:700, color:'var(--red)', marginBottom:6 }}>⚠ {errors.length} erreur(s)</div>
+                {errors.map((e,i) => <div key={i} style={{ fontSize:11, color:'var(--red)' }}>{e}</div>)}
+              </div>
+            )}
+            <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
+              <button className="btn btn-g" onClick={onClose}>Fermer</button>
+              <button className="btn btn-p"
+                onClick={() => window.open(`/api/exports/payslips.csv?year=${year}&month=${month}`, '_blank')}>
+                📥 Exporter CSV AVS
+              </button>
+              <button className="btn btn-p" style={{ background:'var(--green)' }} onClick={onDone}>
+                💳 Voir les bulletins →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Payroll() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [month, setMonth] = useState(MONTH);
+  const [year, setYear]   = useState(YEAR);
+  const [showRun, setShowRun] = useState(false);
+  const sector = useSector();
+
+  const { data: pD, loading, error, reload } = useApi(
+    () => apiFetch(`/salary/payslips?year=${year}&month=${month}`), [year, month]
+  );
+  const { data: empD } = useApi(() => apiFetch('/employees'));
+  const payslips  = pD?.payslips  || [];
+  const employees = empD?.employees || [];
+  const total     = payslips.reduce((s: number, p: any) => s + parseFloat(p.gross_salary||0), 0);
+  const totalNet  = payslips.reduce((s: number, p: any) => s + parseFloat(p.net_salary||0), 0);
+
+  const isCurrentMonth = month === MONTH && year === YEAR;
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Module Paie" sub="Bulletins · Validation mensuelle · PDF"
+        actions={<>
+          <button className="btn btn-g" style={{ fontSize:11 }}
+            onClick={() => window.open(`/api/exports/payslips.csv?year=${year}&month=${month}`,'_blank')}>
+            📤 Export CSV
+          </button>
+          {payslips.length === 0 && (
+            <button className="btn btn-p" style={{ fontSize:11, background:'var(--green)' }}
+              onClick={() => setShowRun(true)}>
+              🚀 Lancer la paie
+            </button>
+          )}
+        </>}
+      />
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Sélecteur période */}
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <select className="inp" style={{ width:130 }} value={month} onChange={e => setMonth(+e.target.value)}>
+            {MONTH_NAMES.map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
+          </select>
+          <select className="inp" style={{ width:80 }} value={year} onChange={e => setYear(+e.target.value)}>
+            {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {total > 0 && (
+            <div style={{ display:'flex', gap:10, marginLeft:8, flexWrap:'wrap' }}>
+              {[
+                { l:'Brut total', v:fCHF(total),   c:'var(--blue)' },
+                { l:'Net total',  v:fCHF(totalNet), c:'var(--green)' },
+              ].map((k,i) => (
+                <div key={i} style={{ padding:'5px 12px', background:'var(--surf)', border:'1px solid var(--b2)', borderRadius:7 }}>
+                  <span style={{ fontSize:10, color:'var(--tm)', fontWeight:700 }}>{k.l}: </span>
+                  <span className="mono" style={{ fontSize:13, fontWeight:900, color:k.c }}>{k.v}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <ApiState loading={loading} error={error}>
+          {payslips.length === 0 ? (
+            <div style={{ padding:40, textAlign:'center' }}>
+              <div style={{ fontSize:48, marginBottom:16 }}>💳</div>
+              <div style={{ fontWeight:800, fontSize:16, marginBottom:8 }}>Aucun bulletin pour {MONTH_NAMES[month-1]} {year}</div>
+              <div style={{ fontSize:12, color:'var(--tm)', marginBottom:20 }}>
+                {employees.length === 0
+                  ? 'Commencez par ajouter des collaborateurs'
+                  : `${employees.length} collaborateur(s) prêt(s) · Cliquez pour lancer la paie`
+                }
+              </div>
+              {employees.length > 0 && (
+                <button className="btn btn-p" style={{ fontSize:13, padding:'12px 24px', background:'var(--green)' }}
+                  onClick={() => setShowRun(true)}>
+                  🚀 Lancer la paie {MONTH_NAMES[month-1]}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="card">
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 44px',
+                gap:8, padding:'9px 16px', background:'var(--surf2)',
+                borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
+                {['Employé','Brut','Net','Charges er.','Coût total','Statut','PDF'].map(h => (
+                  <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
+                ))}
+              </div>
+              {payslips.map((ps: any, i: number) => (
+                <div key={ps.id} className="row" style={{ display:'grid',
+                  gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 44px',
+                  gap:8, padding:'12px 16px', alignItems:'center',
+                  animation:`slideUp .4s ${i*30}ms both` }}>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{ps.first_name} {ps.last_name}</div>
+                  <div className="mono" style={{ fontWeight:800, color:'var(--blue)', fontSize:13 }}>{fCHF(ps.gross_salary)}</div>
+                  <div className="mono" style={{ fontWeight:800, color:'var(--green)', fontSize:13 }}>{fCHF(ps.net_salary)}</div>
+                  <div className="mono" style={{ fontSize:12, color:'var(--amber)' }}>{fCHF(ps.total_employer)}</div>
+                  <div className="mono" style={{ fontWeight:800, fontSize:12 }}>{fCHF(ps.total_cost)}</div>
+                  <span className={`badge s-${ps.status||'approved'}`}>{ps.status||'validé'}</span>
+                  <button className="btn btn-g" style={{ padding:'4px 7px', fontSize:12 }} title="Télécharger PDF"
+                    onClick={() => window.open(`/api/salary/payslip/${ps.id}/pdf`,'_blank')}>
+                    📄
+                  </button>
+                </div>
+              ))}
+              {/* Total row */}
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 44px',
+                gap:8, padding:'12px 16px', background:'var(--surf2)',
+                borderTop:'2px solid var(--b2)', borderRadius:'0 0 var(--r) var(--r)' }}>
+                <div style={{ fontWeight:800, fontSize:12 }}>TOTAL · {payslips.length} bulletins</div>
+                <div className="mono" style={{ fontWeight:900, color:'var(--blue)' }}>{fCHF(total)}</div>
+                <div className="mono" style={{ fontWeight:900, color:'var(--green)' }}>{fCHF(totalNet)}</div>
+                <div/>
+                <div className="mono" style={{ fontWeight:900 }}>{fCHF(payslips.reduce((s: number,p: any) => s+parseFloat(p.total_cost||0),0))}</div>
+                <div/><div/>
+              </div>
+            </div>
+          )}
+        </ApiState>
+      </div>
+
+      {showRun && (
+        <PayrollRunModal
+          month={month} year={year}
+          employees={employees.filter((e: any) => e.is_active)}
+          sector={sector}
+          onClose={() => setShowRun(false)}
+          onDone={() => { setShowRun(false); reload(); }}
+        />
+      )}
     </div>
   );
 }
@@ -1322,193 +2171,6 @@ function NewAbsenceModal({ employees, onClose, onSaved }) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   PAGE: TIME TRACKING (câblé API)
-══════════════════════════════════════════════════════════ */
-
-function TimeTracking() {
-  const w = useW();
-  const p = w < 600 ? '14px 12px' : '18px 26px';
-  const [empId, setEmpId] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const { data: empD } = useApi(() => apiFetch('/employees'));
-  const employees = empD?.employees || [];
-
-  const { data: timeD, reload: reloadTime } = useApi(
-    () => empId ? apiFetch(`/time/summary/${empId}?year=${YEAR}&month=${MONTH}`) : Promise.resolve(null),
-    [empId]
-  );
-
-  useEffect(() => { if (employees.length > 0 && !empId) setEmpId(String(employees[0].id)); }, [employees]);
-
-  const emp = employees.find(e => String(e.id) === String(empId));
-  const summary = timeD?.summary;
-  const entries = timeD?.entries || [];
-
-  return (
-    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Pointage & Présences" sub="LTr Art. 15 · Heures de travail"
-        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={async () => {
-          if (!empId) return;
-          setSaving(true);
-          // Save current entries
-          setSaving(false);
-        }}>💾 Enregistrer</button>}
-      />
-      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="gtime">
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div className="card" style={{ padding:16 }}>
-              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:8 }}>Collaborateur</label>
-              <select className="inp" value={empId} onChange={e => setEmpId(e.target.value)}>
-                {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-              </select>
-            </div>
-
-            {summary && (
-              <div className="card" style={{ padding:16 }}>
-                <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>📅 Résumé {new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})}</div>
-                {[
-                  ['Travaillées',    hToHMM(summary.total_worked_hours||0),    'var(--blue)'],
-                  ['Contractuelles', hToHMM(summary.target_hours||0),           'var(--tm)'],
-                  ['Heures supp.',   hToHMM(summary.overtime_hours||0),         'var(--amber)'],
-                  ['Solde',         (summary.balance_hours >= 0 ? '+' : '') + hToHMM(summary.balance_hours||0),
-                    summary.balance_hours >= 0 ? 'var(--green)' : 'var(--red)'],
-                ].map(([l, v, c], i) => (
-                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0',
-                    borderTop: i > 0 ? '1px solid var(--b1)' : undefined }}>
-                    <span style={{ fontSize:12, color:'var(--t2)' }}>{l}</span>
-                    <span className="mono" style={{ fontSize:14, fontWeight:900, color:c }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ padding:12, background:'var(--amberd)', borderRadius:8, border:'1px solid rgba(245,158,11,.2)', fontSize:11 }}>
-              <div style={{ fontWeight:700, color:'var(--amber)', marginBottom:4 }}>⚖️ Pauses légales LTr</div>
-              <div style={{ color:'var(--t2)', lineHeight:1.7 }}>{'>'} 5h30 → 15 min<br/>{'>'} 7h → 30 min<br/>{'>'} 9h → 60 min</div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:13 }}>
-              Feuille de temps — {new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})}
-            </div>
-            {entries.length === 0 ? (
-              <div style={{ padding:32, textAlign:'center', color:'var(--tm)', fontSize:13 }}>
-                Aucune entrée ce mois
-              </div>
-            ) : (
-              <>
-                <div style={{ display:'grid',
-                  gridTemplateColumns: w < 500 ? '70px 1fr 1fr 60px' : '100px 80px 80px 60px 70px 60px',
-                  gap:6, padding:'8px 14px', background:'var(--surf2)', borderBottom:'1px solid var(--b1)',
-                  fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>
-                  {(w < 500 ? ['Date','Arrivée','Départ','Total'] : ['Date','Arrivée','Départ','Pause','Total','HS']).map(h => <div key={h}>{h}</div>)}
-                </div>
-                {entries.map((e, i) => (
-                  <div key={e.id} className="row" style={{ display:'grid',
-                    gridTemplateColumns: w < 500 ? '70px 1fr 1fr 60px' : '100px 80px 80px 60px 70px 60px',
-                    gap:6, padding:'10px 14px', alignItems:'center',
-                    animation:`slideUp .4s cubic-bezier(.16,1,.3,1) ${i*40}ms both` }}>
-                    <div style={{ fontSize:11, fontWeight:700 }}>{fDate(e.work_date)}</div>
-                    <div className="mono" style={{ fontSize:12 }}>{e.start_time || '—'}</div>
-                    <div className="mono" style={{ fontSize:12 }}>{e.end_time || '—'}</div>
-                    {w >= 500 && <div className="mono" style={{ fontSize:11 }}>{hToHMM(e.break_minutes/60||0)}</div>}
-                    <div className="mono" style={{ fontSize:13, fontWeight:900, color:'var(--blue)' }}>{hToHMM(e.worked_hours||0)}</div>
-                    {w >= 500 && <div className="mono" style={{ fontSize:12, fontWeight:800, color: (e.overtime_hours||0) > 0 ? 'var(--amber)' : 'var(--tm)' }}>
-                      {(e.overtime_hours||0) > 0 ? hToHMM(e.overtime_hours) : '—'}
-                    </div>}
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   PAGE: PAYROLL (bulletins de salaire)
-══════════════════════════════════════════════════════════ */
-function Payroll() {
-  const w = useW();
-  const p = w < 600 ? '14px 12px' : '18px 26px';
-  const [month, setMonth] = useState(MONTH);
-  const [year, setYear]   = useState(YEAR);
-
-  const { data: pD, loading, error, reload } = useApi(
-    () => apiFetch(`/salary/payslips?year=${year}&month=${month}`), [year, month]
-  );
-  const payslips = pD?.payslips || [];
-  const total = payslips.reduce((s, p) => s + parseFloat(p.gross_salary||0), 0);
-
-  return (
-    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
-      <Topbar title="Module Paie" sub="Bulletins de salaire · Validation mensuelle"
-        actions={<>
-          <button className="btn btn-g" style={{ fontSize:11 }}
-            onClick={() => window.open(`/api/exports/payslips.csv?year=${year}&month=${month}`, '_blank')}>
-            📤 Export CSV
-          </button>
-        </>}/>
-      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <select className="inp" style={{ width:100 }} value={month} onChange={e => setMonth(+e.target.value)}>
-            {Array.from({length:12},(_,i) => <option key={i+1} value={i+1}>{new Date(2025,i).toLocaleString('fr-CH',{month:'long'})}</option>)}
-          </select>
-          <select className="inp" style={{ width:80 }} value={year} onChange={e => setYear(+e.target.value)}>
-            {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          {total > 0 && <div className="mono" style={{ fontWeight:800, fontSize:16, color:'var(--blue)', marginLeft:8 }}>
-            Total brut: CHF {fmt(total,0)}
-          </div>}
-        </div>
-
-        <ApiState loading={loading} error={error}>
-          {payslips.length === 0 ? (
-            <div style={{ padding:40, textAlign:'center' }}>
-              <div style={{ fontSize:36, marginBottom:12 }}>💳</div>
-              <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Aucun bulletin ce mois</div>
-              <div style={{ fontSize:12, color:'var(--tm)' }}>Les bulletins sont générés via le calculateur de salaire</div>
-            </div>
-          ) : (
-            <div className="card">
-              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 50px',
-                gap:10, padding:'9px 16px', background:'var(--surf2)',
-                borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
-                {['Employé','Brut','Net','Charges er.','Coût total','Statut','PDF'].map(h => (
-                  <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
-                ))}
-              </div>
-              {payslips.map((ps, i) => (
-                <div key={ps.id} className="row" style={{ display:'grid',
-                  gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 50px',
-                  gap:10, padding:'12px 16px', alignItems:'center',
-                  animation:`slideUp .4s ${i*30}ms both` }}>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{ps.first_name} {ps.last_name}</div>
-                  <div className="mono" style={{ fontWeight:800, color:'var(--blue)' }}>{fCHF(ps.gross_salary)}</div>
-                  <div className="mono" style={{ fontWeight:800, color:'var(--green)' }}>{fCHF(ps.net_salary)}</div>
-                  <div className="mono" style={{ fontSize:12, color:'var(--amber)' }}>{fCHF(ps.total_employer)}</div>
-                  <div className="mono" style={{ fontWeight:800 }}>{fCHF(ps.total_cost)}</div>
-                  <span className={`badge s-${ps.status||'approved'}`}>{ps.status||'validé'}</span>
-                  <button className="btn btn-g" style={{ padding:'4px 8px', fontSize:11 }} title="Télécharger PDF"
-                    onClick={() => window.open(`/api/salary/payslip/${ps.id}/pdf`, '_blank')}>
-                    📄
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </ApiState>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
    PAGE: RAPPORTS (exports AVS, Lohnausweis)
 ══════════════════════════════════════════════════════════ */
 function Reports() {
@@ -1616,6 +2278,27 @@ function Settings() {
         <ApiState loading={loading} error={null}>
           {form && (
             <>
+              {/* Secteur d'activité */}
+              <div className="card" style={{ padding:20, marginBottom:0 }}>
+                <SH>🏭 Secteur d'activité</SH>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                  {Object.entries(SECTOR_PROFILES).map(([key, s]) => (
+                    <div key={key}
+                      style={{
+                        padding:'12px 14px', borderRadius:9, cursor:'pointer',
+                        border:`2px solid ${form?.sector === key ? s.color : 'var(--b2)'}`,
+                        background: form?.sector === key ? `${s.color}12` : 'var(--surf)',
+                        transition:'all .2s',
+                      }}
+                      onClick={() => set('sector', key)}>
+                      <div style={{ fontSize:22, marginBottom:6 }}>{s.icon}</div>
+                      <div style={{ fontSize:11, fontWeight:700, lineHeight:1.3 }}>{s.label}</div>
+                      {key === 'restaurant' && <div style={{ fontSize:9, color:'var(--tm)', marginTop:4 }}>DEXTRA · CCT · Pourboires</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="card" style={{ padding:20 }}>
                 <SH>🏢 Informations entreprise</SH>
                 <div className="g2" style={{ gap:12 }}>

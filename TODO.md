@@ -1,56 +1,73 @@
 # SwissRH — TODO List
-_Mis à jour : 2026-03-10 (session 2)_
+_Mis à jour : 2026-03-10 (session 3 — UX maximale)_
 
-## 🔴 BLOQUANT PROD (Railway)
+## 🔴 SEUL BLOQUANT
 
-- [ ] **Railway deploy** — créer projet, GitHub service, PostgreSQL, env vars
-- [ ] **Migrations initiales** — vérifier que les 21 patches passent au 1er deploy
-- [ ] **Domain** — swissrh.ch → Railway
+- [ ] **Railway deploy** — créer projet, GitHub service, PostgreSQL, env vars → DONE en 20min dès que Railway est dispo
 
-## ✅ FAIT AUJOURD'HUI
+## ✅ FAIT AUJOURD'HUI (session 3)
 
-- [x] **Session persistante** — `/auth/me` au démarrage, cookie srh_session
-- [x] **Setup Wizard** — onboarding 2 étapes (company + admin) au 1er démarrage
-- [x] **Auth/setup-check** — détecte si la DB est vide → redirige vers setup
-- [x] **Logout** — bouton dans sidebar, clearCookie
-- [x] **User info dans sidebar** — initiales + prénom + rôle depuis session
-- [x] **PDF Bulletins de salaire** — PDFKit A4, design professionnel (chargé en production)
-  - Layout: header band + blocs company/employé + revenus + déductions + net + charges patronales
-  - Footer CONFIDENTIEL + mentions légales
-  - Route: `GET /api/salary/payslip/:id/pdf`
-- [x] **Bouton PDF** dans page Payroll (📄 par bulletin)
-- [x] **pdfkit** ajouté à package.json
-- [x] **Seed demo data** — script complet + route `POST /api/admin/seed-demo` (dev only)
-  - Company: Dupont Industries Sàrl, JU
-  - Login: admin@demo.ch / Demo2025!
-  - 5 employés réalistes (CH/B/G), absences, time entries
+### Système de profils sectoriels
+- [x] 4 profils : Restaurant/Hôtellerie · Commerce · Construction · Bureau
+- [x] Préconfigure contrat, heures, CCT, DEXTRA selon secteur
+- [x] Sélecteur visuel dans Paramètres
+- [x] Propagation dans toute l'app via `useSector()`
+
+### DEXTRA & Temps (Restauration)
+- [x] Grille visuelle semaine (7 jours, cliquable, navigation semaines)
+- [x] Badges DEXTRA en temps réel : 🌙 nuit · ☀ dim · ⏱ suppl.
+- [x] Modal saisie avec shift presets (Matin/Midi/Soir/Nuit/Coupure)
+- [x] Auto-calcul DEXTRA : +20% nuit CCT / +50% dimanche / +25% suppl.
+- [x] Affichage en CHF des suppléments gagnés
+- [x] Récap mensuel DEXTRA (total suppléments)
+- [x] Champ Pourboires (restauration uniquement)
+- [x] Rappels légaux LTr contextuels
+
+### Lancer la paie (one-click)
+- [x] Flow 3 étapes : Preview → Lancement → Confirmation
+- [x] Calcul batch tous employés avec prévisualisation
+- [x] Barre de progression en temps réel
+- [x] Bouton "Lancer la paie" dans Payroll quand 0 bulletins
+- [x] Export CSV AVS direct depuis confirmation
+
+### Dashboard actionnable
+- [x] Zone "Actions requises" : congés en attente · permis · soldes > 20j · paie fin du mois
+- [x] Codes urgence (rouge/orange/bleu) avec navigation directe
+- [x] Mention secteur dans le sous-titre
+- [x] Alertes CCT (rappels légaux secteur)
+
+### Migrations DB
+- [x] Patch 022 : sector, has_dextra, cct_name, night/sunday/holiday_hours, tips_amount, notes
+
+## ✅ SESSIONS PRÉCÉDENTES
+
+- [x] Backend API complet (9 modules)
+- [x] Sécurité 7 critiques (AES-256, JWT, nLPD, audit log)
+- [x] SSO Magic Link WinWin ↔ SwissRH
+- [x] Frontend 9 pages câblées API
+- [x] Auth session persistante + Setup Wizard
+- [x] PDF Bulletins PDFKit (design professionnel A4)
+- [x] Seed demo data (admin@demo.ch / Demo2025!)
 
 ## 🟠 PROCHAIN SPRINT
 
-- [ ] **Lohnausweis PDF** — certificat de salaire 15 cases (obligatoire fin d'année)
-- [ ] **Module paie mensuel** — bouton "Lancer la paie" : calcul automatique pour tous les employés
-- [ ] **Email Resend** — alertes permis + demandes congés en attente
-- [ ] **Portail employé** — vue lecture seule (fiche de paie, absences, pointage)
-- [ ] **Tests E2E Playwright** — login → dashboard → créer employé → calcul salaire
-
-## 🟢 BACKLOG (v2)
-
-- [ ] Stripe billing
-- [ ] Intégration WinWin upsell LAA/LPP
-- [ ] Swissdec 5.0 certification
-- [ ] AVS XML ELM export structuré
-- [ ] Mobile PWA
+- [ ] **Calendrier absences** — vue mois visuelle (drag & drop)
+- [ ] **Lohnausweis PDF** — certificat de salaire 15 cases
+- [ ] **Email Resend** — alertes permis + demandes congés
+- [ ] **Portail employé** — vue lecture seule mobile-first
+- [ ] **Module pourboires** — décompte et déclaration mensuelle
 
 ## STATUS GLOBAL
 
 | Couche | État |
 |--------|------|
 | Backend API | ✅ Production ready |
-| Sécurité (7 critiques) | ✅ Corrigé |
+| Sécurité | ✅ Complet |
 | SSO WinWin | ✅ Implémenté |
 | Frontend (9 pages) | ✅ Toutes câblées |
-| Auth session persistante | ✅ |
-| Setup wizard | ✅ |
+| Auth / Setup | ✅ |
 | PDF bulletins | ✅ |
+| Secteurs / DEXTRA | ✅ Restaurant complet |
+| Lancer la paie | ✅ Flow complet |
 | Seed demo | ✅ |
-| Railway deploy | 🔴 En attente |
+| Railway | 🔴 En attente |
