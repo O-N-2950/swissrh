@@ -32,7 +32,7 @@ import { fileURLToPath } from 'url';
 import cookieParser from 'cookie-parser';
 
 import { migrateOnStart }           from './db/migrate.js';
-import { migrateSecurityPatches }   from './db/migrate-security.js';
+import { migrateSecurityPatches, migrateSso, migrateSectorDextra } from './db/migrate-security.js';
 import { startPoolKeepalive }       from './db/pool.js';
 import { startupCheck, startPeriodicMonitoring } from './monitoring/crash-monitor.js';
 import { monitoringRouter }         from './monitoring/routes.js';
@@ -130,6 +130,8 @@ async function start() {
 
   await migrateOnStart();
   await migrateSecurityPatches();
+  await migrateSso();
+  await migrateSectorDextra();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);

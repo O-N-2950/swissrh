@@ -116,7 +116,10 @@ export async function migrateSso(): Promise<void> {
   console.log('[MIGRATE] ✅ 021 SSO nonces + companies.winwin_client_id');
 }
 
-  // ── PATCH 022 — Sector profile + DEXTRA fields ───────────────────────
+// ── PATCH 022 — Sector profile + DEXTRA fields ───────────────────────
+export async function migrateSectorDextra(): Promise<void> {
+  const sql = getSQL();
+
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS sector VARCHAR(30) DEFAULT 'office'`;
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS has_dextra BOOLEAN DEFAULT false`;
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS cct_name VARCHAR(100)`;
@@ -131,3 +134,4 @@ export async function migrateSso(): Promise<void> {
   await sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS age INTEGER GENERATED ALWAYS AS (DATE_PART('year', AGE(birthdate))::int) STORED`;
 
   console.log('[MIGRATE] ✅ Patch 022 — Sector + DEXTRA');
+}
