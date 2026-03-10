@@ -92,3 +92,9 @@ export function startPoolKeepalive() {
 
   console.log('💓 [POOL] Keepalive started (20s interval)');
 }
+
+/** Alias de compatibilité — appelé dans seed-demo */
+export function initPool(): void {
+  // pool initialisé automatiquement via getSQL()
+}
+
