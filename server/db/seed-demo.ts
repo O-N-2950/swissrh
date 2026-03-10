@@ -5,7 +5,7 @@
  *        ou via route: POST /api/admin/seed-demo (dev only)
  */
 import bcrypt from 'bcryptjs';
-import { getSQL, initPool } from './pool.js';
+import { getSQL } from './pool.js';
 
 export async function seedDemo(): Promise<{ ok: boolean; message: string }> {
   const sql = getSQL();
@@ -200,7 +200,6 @@ export async function seedDemo(): Promise<{ ok: boolean; message: string }> {
 
 // Run standalone
 if (process.argv[1].includes('seed-demo')) {
-  initPool();
   seedDemo()
     .then(r => { console.log(r.message); process.exit(0); })
     .catch(e => { console.error(e); process.exit(1); });
