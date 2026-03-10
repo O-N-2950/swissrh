@@ -2,10 +2,13 @@
 nixPkgs = ["nodejs_22"]
 
 [phases.install]
-cmds = ["npm ci", "cd client && npm ci"]
+cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["cd client && npx vite build", "npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"]
+cmds = [
+  "cd client && npm ci && npx vite build",
+  "cd /app && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"
+]
 
 [start]
 cmd = "node dist/index.js"
