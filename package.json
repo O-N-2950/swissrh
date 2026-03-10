@@ -41,5 +41,6 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.3",
     "vitest": "^2.0.0"
-  }
+  },
+  "_railwayCacheBust": "2026-03-10-v2"
 }

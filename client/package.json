@@ -24,5 +24,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3"
-  }
+  },
+  "_railwayCacheBust": "2026-03-10-v2"
 }
