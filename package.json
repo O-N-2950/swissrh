@@ -1,6 +1,6 @@
 {
   "name": "swissrh",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SWISSRH \u2014 Swiss HR & Payroll SaaS for SMEs. Swiss HR & Payroll \u2014 taux 2025 officiels.",
   "type": "module",
   "scripts": {
