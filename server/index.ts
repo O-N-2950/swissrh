@@ -40,6 +40,7 @@ import { authRouter }               from './auth/routes.js';
 import { requireAuth, requireAdmin } from './auth/middleware.js';
 import { employeesRouter }          from './api/employees.js';
 import { salaryRouter }             from './api/salary.js';
+import { pdfRouter }               from './api/pdf-payslip.js';
 import { reportsRouter }            from './api/reports.js';
 import { companyRouter }            from './api/company.js';
 import { exportRouter }             from './api/exports.js';
@@ -75,6 +76,7 @@ app.use('/api/auth',       authRouter);
 app.use('/api/monitoring', requireAdmin, monitoringRouter);
 app.use('/api/employees',  requireAuth, employeesRouter);
 app.use('/api/salary',     requireAuth, salaryRouter);
+app.use('/api/salary',     requireAuth, pdfRouter);
 app.use('/api/reports',    requireAuth, reportsRouter);
 app.use('/api/company',    requireAuth, companyRouter);
 app.use('/api/exports',    requireAuth, exportRouter);   // exports sécurisés (CRITIQUE 5)
@@ -151,3 +153,14 @@ async function start() {
 }
 
 start();
+
+// POST /api/admin/seed-demo — Dev/demo only
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/admin/seed-demo', async (_req, res) => {
+    try {
+      const { seedDemo } = await import('./db/seed-demo.js');
+      const result = await seedDemo();
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+}

@@ -52,8 +52,8 @@ _Dernière mise à jour : 2026-03-10_
 | Reports | ✅ Export CSV AVS + employees + payslips |
 | Settings | ✅ Paramètres entreprise + taux assurance |
 
-### 🔴 Manquant (bloquant prod)
-1. **Railway deploy** — projet pas encore créé (incident résolu ?)
+### 🔴 Manquant (bloquant prod — Railway uniquement)
+1. **Railway deploy** — SEUL vrai bloquant — projet pas encore créé (incident résolu ?)
 2. **PDF bulletins de salaire** — Puppeteer/PDFKit pas implémenté
 3. **Auth réelle** — Login connecté API (actuellement mock `onLogin()`)
 

@@ -409,7 +409,7 @@ const NAV = [
   { id:"settings",  em:"⚙", lb:"Paramètres"     },
 ];
 
-function Sidebar({ page, setPage, open, setOpen }) {
+function Sidebar({ page, setPage, open, setOpen, user, onLogout }) {
   const w = useW();
   const [col, setCol] = useState(false);
   const isMobile = w < 768;
@@ -493,12 +493,17 @@ function Sidebar({ page, setPage, open, setOpen }) {
           <span style={{ fontSize:13 }}>{col ? "→" : "←"}</span>
           {!col && <span style={{ fontSize:11, color:"rgba(255,255,255,.3)" }}>Réduire</span>}
         </div>
-        <div className="sbi" style={{ justifyContent: col ? "center" : undefined, padding: col ? "8px 0" : undefined, gap: col ? 0 : 9 }}>
+        <div className="sbi" style={{ justifyContent: col ? "center" : undefined, padding: col ? "8px 0" : undefined, gap: col ? 0 : 9 }}
+          onClick={onLogout} title="Se déconnecter">
           <div style={{ width:26, height:26, borderRadius:"50%", background:"var(--sbac)", flexShrink:0,
-            display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, color:"var(--sb)" }}>AD</div>
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:900, color:"var(--sb)" }}>
+            {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'}
+          </div>
           {!col && <div>
-            <div style={{ fontSize:11, fontWeight:700, color:"#fff" }}>Admin</div>
-            <div style={{ fontSize:9, color:"rgba(255,255,255,.35)" }}>Déconnexion</div>
+            <div style={{ fontSize:11, fontWeight:700, color:"#fff" }}>
+              {user?.firstName || user?.first_name || user?.email?.split('@')[0] || 'Admin'}
+            </div>
+            <div style={{ fontSize:9, color:"rgba(255,255,255,.35)", cursor:'pointer' }}>🚪 Déconnexion</div>
           </div>}
         </div>
       </div>
@@ -741,7 +746,7 @@ const ChartTip = ({ active, payload, label }) => {
   );
 };
 
-function Dashboard() {
+function Dashboard({ user = null }: any) {
   const w = useW();
   const p = w < 600 ? '14px 12px' : '20px 26px';
   const [hp, setHp] = useState(null);
@@ -769,7 +774,7 @@ function Dashboard() {
   return (
     <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
       <Topbar title="Dashboard RH"
-        sub={kLoading ? 'Chargement…' : `${new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})} · ${employees?.total ?? '…'} collaborateurs`}
+        sub={kLoading ? 'Chargement…' : `${new Date().toLocaleString('fr-CH',{month:'long',year:'numeric'})} · ${employees?.total ?? '…'} collaborateurs${user?.companyName ? ` · ${user.companyName}` : ''}`}
         actions={<>
           <button className="btn btn-g" style={{ fontSize:11 }}
             onClick={() => window.open('/api/exports/employees.csv','_blank')}>📤 Export</button>
@@ -1471,16 +1476,16 @@ function Payroll() {
             </div>
           ) : (
             <div className="card">
-              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px',
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 50px',
                 gap:10, padding:'9px 16px', background:'var(--surf2)',
                 borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0' }}>
-                {['Employé','Brut','Net','Charges er.','Coût total',''].map(h => (
+                {['Employé','Brut','Net','Charges er.','Coût total','Statut','PDF'].map(h => (
                   <div key={h} style={{ fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>{h}</div>
                 ))}
               </div>
               {payslips.map((ps, i) => (
                 <div key={ps.id} className="row" style={{ display:'grid',
-                  gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px',
+                  gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 80px 50px',
                   gap:10, padding:'12px 16px', alignItems:'center',
                   animation:`slideUp .4s ${i*30}ms both` }}>
                   <div style={{ fontWeight:700, fontSize:13 }}>{ps.first_name} {ps.last_name}</div>
@@ -1489,6 +1494,10 @@ function Payroll() {
                   <div className="mono" style={{ fontSize:12, color:'var(--amber)' }}>{fCHF(ps.total_employer)}</div>
                   <div className="mono" style={{ fontWeight:800 }}>{fCHF(ps.total_cost)}</div>
                   <span className={`badge s-${ps.status||'approved'}`}>{ps.status||'validé'}</span>
+                  <button className="btn btn-g" style={{ padding:'4px 8px', fontSize:11 }} title="Télécharger PDF"
+                    onClick={() => window.open(`/api/salary/payslip/${ps.id}/pdf`, '_blank')}>
+                    📄
+                  </button>
                 </div>
               ))}
             </div>
@@ -1750,19 +1759,117 @@ function Placeholder({ icon, title, desc }) {
 }
 
 
+/* ══ SETUP WIZARD (1er démarrage) ═══════════════════════ */
+function SetupWizard({ onDone }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({
+    companyName:'', canton:'JU', email:'', password:'', confirm:''
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const CANTONS = ['AG','AI','AR','BE','BL','BS','FR','GE','GL','GR','JU','LU','NE','NW','OW','SG','SH','SO','SZ','TG','TI','UR','VD','VS','ZG','ZH'];
+
+  const finish = async () => {
+    if (form.password !== form.confirm) { setErr('Les mots de passe ne correspondent pas'); return; }
+    if (form.password.length < 8) { setErr('Mot de passe : 8 caractères minimum'); return; }
+    setSaving(true); setErr('');
+    try {
+      await apiFetch('/auth/setup', 'POST', {
+        email: form.email, password: form.password,
+        companyName: form.companyName, canton: form.canton,
+      });
+      onDone();
+    } catch(e) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  const F = ({ label, k, type='text', opts=null }) => (
+    <div style={{ marginBottom:14 }}>
+      <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{label}</label>
+      {opts ? (
+        <select className="inp" value={form[k]||''} onChange={e=>set(k,e.target.value)}>
+          {opts.map(o=><option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input className="inp" type={type} value={form[k]||''} onChange={e=>set(k,e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&step===2&&finish()}/>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center',
+      background:'var(--bg)', padding:16 }}>
+      <div className="card" style={{ width:'100%', maxWidth:460, padding:36 }}>
+        <div style={{ textAlign:'center', marginBottom:24 }}>
+          <SwissRHLogo height={44}/>
+          <div style={{ fontSize:13, fontWeight:700, marginTop:12, marginBottom:4 }}>Configuration initiale</div>
+          <div style={{ fontSize:11, color:'var(--tm)' }}>Étape {step} / 2</div>
+          <div style={{ display:'flex', gap:4, justifyContent:'center', marginTop:10 }}>
+            {[1,2].map(s=>(
+              <div key={s} style={{ height:3, width:60, borderRadius:2,
+                background: s<=step ? 'var(--blue)' : 'var(--surf2)', transition:'background .3s' }}/>
+            ))}
+          </div>
+        </div>
+
+        {step === 1 ? (
+          <>
+            <div style={{ fontWeight:700, fontSize:14, marginBottom:16 }}>🏢 Votre entreprise</div>
+            <F label="Raison sociale *" k="companyName"/>
+            <F label="Canton" k="canton" opts={CANTONS}/>
+            <button className="btn btn-p" style={{ width:'100%', justifyContent:'center', padding:'10px 0' }}
+              onClick={() => { if(!form.companyName.trim()) { setErr('Raison sociale requise'); return; } setErr(''); setStep(2); }}>
+              Suivant →
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontWeight:700, fontSize:14, marginBottom:16 }}>👤 Compte administrateur</div>
+            <F label="Email *" k="email" type="email"/>
+            <F label="Mot de passe *" k="password" type="password"/>
+            <F label="Confirmer *" k="confirm" type="password"/>
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="btn btn-g" style={{ flex:1 }} onClick={() => { setErr(''); setStep(1); }}>← Retour</button>
+              <button className="btn btn-p" style={{ flex:2, justifyContent:'center' }}
+                onClick={finish} disabled={saving}>
+                {saving ? <Spinner size={14}/> : '🚀 Créer mon compte'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {err && <div style={{ color:'var(--red)', fontSize:12, marginTop:10 }}>⚠ {err}</div>}
+        <div style={{ marginTop:16, textAlign:'center', fontSize:10, color:'var(--tm)' }}>
+          Neukomm Group · WW Finance Group Sàrl
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ══ LOGIN ══════════════════════════════════════════════ */
-function Login({ onLogin }) {
-  const [email, setEmail] = useState('admin@swissrh.ch');
+function Login({ onLogin, onSetup }) {
+  const [email, setEmail] = useState('');
   const [pwd, setPwd]     = useState('');
   const [err, setErr]     = useState('');
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
+    if (!email || !pwd) { setErr('Email et mot de passe requis'); return; }
     setLoading(true); setErr('');
     try {
-      await apiFetch('/auth/login', 'POST', { email, password: pwd });
-      onLogin();
-    } catch(e) { setErr(e.message || 'Identifiants incorrects'); }
+      const res = await apiFetch('/auth/login', 'POST', { email, password: pwd });
+      onLogin(res.user);
+    } catch(e:any) {
+      // Si pas d'utilisateurs → rediriger vers setup
+      if (e.message?.includes('setup') || e.message?.includes('introuvable')) {
+        onSetup?.();
+      } else {
+        setErr(e.message || 'Identifiants incorrects');
+      }
+    }
     setLoading(false);
   };
 
@@ -1774,11 +1881,14 @@ function Login({ onLogin }) {
           <SwissRHLogo height={44}/>
           <div style={{ fontSize:12, color:'var(--tm)', marginTop:8 }}>Plateforme RH Suisse</div>
         </div>
-        {[['Email','email','email',email,setEmail],['Mot de passe','password','password',pwd,setPwd]].map(([lbl,type,id,val,fn]) => (
+        {[
+          ['Email','email','email',email,(v:string)=>setEmail(v)],
+          ['Mot de passe','password','password',pwd,(v:string)=>setPwd(v)]
+        ].map(([lbl,type,id,val,fn]:any) => (
           <div key={id} style={{ marginBottom:14 }}>
             <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>{lbl}</label>
-            <input className="inp" id={id} type={type} value={val} onChange={e => fn(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && submit()}/>
+            <input className="inp" id={id} type={type} value={val}
+              onChange={e=>fn(e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()}/>
           </div>
         ))}
         {err && <div style={{ color:'var(--red)', fontSize:12, marginBottom:10 }}>⚠ {err}</div>}
@@ -1794,17 +1904,61 @@ function Login({ onLogin }) {
   );
 }
 
-/* ══ APP ROOT ═══════════════════════════════════════════ */
+/* ══ APP ROOT — session persistante + /auth/me ══════════ */
 export default function App() {
-  const [auth, setAuth] = useState(false);
-  const [page, setPage] = useState('dashboard');
-  const [menu, setMenu] = useState(false);
+  const [authState, setAuthState] = useState<'loading'|'setup'|'login'|'ok'>('loading');
+  const [user, setUser]    = useState<any>(null);
+  const [page, setPage]    = useState('dashboard');
+  const [menu, setMenu]    = useState(false);
   const w = useW();
 
-  if (!auth) return (<><style>{CSS}</style><Login onLogin={() => setAuth(true)}/></>);
+  // Au démarrage : tenter /auth/me (session cookie existant)
+  // puis /auth/setup check
+  useEffect(() => {
+    apiFetch('/auth/me')
+      .then(r => { setUser(r.user); setAuthState('ok'); })
+      .catch(async () => {
+        // Vérifier si setup nécessaire
+        try {
+          const r = await apiFetch('/auth/setup-check');
+          setAuthState(r.needsSetup ? 'setup' : 'login');
+        } catch { setAuthState('login'); }
+      });
+  }, []);
+
+  if (authState === 'loading') return (
+    <><style>{CSS}</style>
+      <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
+        <div style={{ textAlign:'center' }}>
+          <SwissRHLogo height={44}/>
+          <div style={{ marginTop:16 }}><Spinner size={24}/></div>
+        </div>
+      </div>
+    </>
+  );
+
+  if (authState === 'setup') return (
+    <><style>{CSS}</style>
+      <SetupWizard onDone={() => setAuthState('login')}/>
+    </>
+  );
+
+  if (authState === 'login') return (
+    <><style>{CSS}</style>
+      <Login
+        onLogin={(u) => { setUser(u); setAuthState('ok'); }}
+        onSetup={() => setAuthState('setup')}
+      />
+    </>
+  );
+
+  const logout = async () => {
+    await apiFetch('/auth/logout', 'POST');
+    setUser(null); setAuthState('login');
+  };
 
   const PAGES = {
-    dashboard: <Dashboard/>,
+    dashboard: <Dashboard user={user}/>,
     employees: <Employees/>,
     salary:    <SalaryCalc/>,
     absences:  <Absences/>,
@@ -1813,15 +1967,15 @@ export default function App() {
     vacations: <Vacations/>,
     reports:   <Reports/>,
     settings:  <Settings/>,
-    documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail. Génération PDF automatique."/>,
+    documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail."/>,
   };
 
   return (
     <><style>{CSS}</style>
       <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
-        <Sidebar page={page} setPage={setPage} open={menu} setOpen={setMenu}/>
+        <Sidebar page={page} setPage={setPage} open={menu} setOpen={setMenu} user={user} onLogout={logout}/>
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background:'var(--bg)' }}>
-          {PAGES[page] ?? <Dashboard/>}
+          {PAGES[page] ?? <Dashboard user={user}/>}
         </div>
       </div>
     </>

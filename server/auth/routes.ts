@@ -130,3 +130,14 @@ authRouter.post('/setup', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// GET /api/auth/setup-check — check if initial setup needed
+authRouter.get('/setup-check', async (_req, res) => {
+  try {
+    const sql = getSQL();
+    const [{ c }] = await sql`SELECT COUNT(*)::int as c FROM users WHERE is_active = true`;
+    res.json({ needsSetup: c === 0 });
+  } catch {
+    res.json({ needsSetup: false });
+  }
+});
