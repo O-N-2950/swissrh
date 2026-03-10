@@ -1,5 +1,6 @@
 node_modules/
-dist/
+# dist/ — committed for Railway deploy
+# # dist/ committed for Railway
 .env
 *.env.local
 .DS_Store
