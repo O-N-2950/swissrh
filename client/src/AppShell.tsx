@@ -2807,7 +2807,7 @@ function Login({ onLogin, onSetup }) {
 }
 
 /* ══ APP ROOT — session persistante + /auth/me ══════════ */
-export default function App() {
+export default function AppShell() {
   const [authState, setAuthState] = useState<'loading'|'setup'|'login'|'ok'>('loading');
   const [user, setUser]    = useState<any>(null);
   const [page, setPage]    = useState('dashboard');
