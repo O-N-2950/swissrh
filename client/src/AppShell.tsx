@@ -3127,6 +3127,427 @@ function Terminations() {
 }
 
 
+
+/* ══ EMPLOYEE PORTAL — Mobile-first ════════════════════════════════════════
+   Design: même system design que AppShell
+   Onglets: Accueil · Bulletins · Absences · Demande
+   Accessible: rôle employee (auto-redirect) + admin/manager (preview)
+═══════════════════════════════════════════════════════════════════════════ */
+
+const MONTHS_FR = ['Janv','Févr','Mars','Avr','Mai','Juin','Juil','Août','Sept','Oct','Nov','Déc'];
+const ABSENCE_LABELS: Record<string, string> = {
+  vacation:'Vacances', sick:'Maladie', accident:'Accident',
+  maternity:'Maternité', paternity:'Paternité', military:'Militaire', other:'Autre',
+};
+
+function PortalHeader({ emp, onLogout }: { emp: any, onLogout?: () => void }) {
+  return (
+    <div style={{
+      background:'linear-gradient(135deg, var(--sb) 0%, #253447 100%)',
+      padding:'20px 20px 0',
+      position:'relative',
+    }}>
+      {/* Logo + logout */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+        <SwissRHLogo height={28} white/>
+        {onLogout && (
+          <button onClick={onLogout} style={{ background:'rgba(255,255,255,.1)', border:'none',
+            color:'rgba(255,255,255,.7)', padding:'5px 10px', borderRadius:6, fontSize:11,
+            cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
+            Déconnexion
+          </button>
+        )}
+      </div>
+      {/* Avatar + nom */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+        <div style={{ width:44, height:44, borderRadius:'50%',
+          background:'linear-gradient(135deg, var(--blue) 0%, #5BA4D9 100%)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize:18, fontWeight:800, color:'#fff', flexShrink:0 }}>
+          {emp?.first_name?.[0]}{emp?.last_name?.[0]}
+        </div>
+        <div>
+          <div style={{ color:'#fff', fontWeight:700, fontSize:16, lineHeight:1.2 }}>
+            {emp?.first_name} {emp?.last_name}
+          </div>
+          <div style={{ color:'rgba(255,255,255,.55)', fontSize:11 }}>
+            {emp?.position || emp?.department || 'Employé'} · {emp?.company_name}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalTabBar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
+  const TABS = [
+    { id:'home',     icon:'🏠', label:'Accueil' },
+    { id:'payslips', icon:'💶', label:'Bulletins' },
+    { id:'absences', icon:'📅', label:'Absences' },
+    { id:'request',  icon:'✉️', label:'Demande' },
+  ];
+  return (
+    <div style={{
+      display:'flex', background:'var(--surf)',
+      borderBottom:'1px solid var(--b1)',
+      position:'sticky', top:0, zIndex:50,
+    }}>
+      {TABS.map(t => (
+        <button key={t.id} onClick={() => setTab(t.id)} style={{
+          flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+          gap:3, padding:'10px 4px', border:'none', cursor:'pointer',
+          background:'transparent', fontFamily:'Outfit,sans-serif',
+          color: tab === t.id ? 'var(--blue)' : 'var(--tm)',
+          borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent',
+          transition:'all .2s', fontSize:11, fontWeight: tab === t.id ? 700 : 500,
+        }}>
+          <span style={{ fontSize:18 }}>{t.icon}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── Accueil ── */
+function PortalHome({ emp, balance, year }: { emp: any, balance: any, year: number }) {
+  const daysLeft = (balance?.balance_days || 0) - (balance?.used_days || 0) - (balance?.pending_days || 0);
+  const permitExpiring = emp?.permit_expiry && new Date(emp.permit_expiry) < new Date(Date.now() + 60*86400000);
+
+  const cards = [
+    { label:'Solde vacances', value: daysLeft, unit:'jours', color:'var(--blue)', icon:'🏖' },
+    { label:'Vacances utilisées', value: balance?.used_days || 0, unit:'jours', color:'var(--green)', icon:'✅' },
+    { label:'En attente approbation', value: balance?.pending_days || 0, unit:'jours', color:'var(--amber)', icon:'⏳' },
+    { label:'Taux d\'activité', value: emp?.activity_rate || 100, unit:'%', color:'var(--purple)', icon:'⚡' },
+  ];
+
+  return (
+    <div style={{ padding:16, display:'flex', flexDirection:'column', gap:14 }}>
+      {/* KPIs vacances */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        {cards.map(c => (
+          <div key={c.label} className="card" style={{ padding:'14px 16px', position:'relative', overflow:'hidden' }}>
+            <div style={{ fontSize:22, marginBottom:6 }}>{c.icon}</div>
+            <div className="mono" style={{ fontSize:22, fontWeight:900, color:c.color, lineHeight:1 }}>
+              {c.value}
+              <span style={{ fontSize:11, fontWeight:500, color:'var(--tm)', marginLeft:4 }}>{c.unit}</span>
+            </div>
+            <div style={{ fontSize:10, color:'var(--tm)', marginTop:4 }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Info employé */}
+      <div className="card" style={{ padding:16 }}>
+        <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>📋 Mon dossier</div>
+        {[
+          ['Poste', emp?.position || '—'],
+          ['Département', emp?.department || '—'],
+          ['Entrée', emp?.hire_date ? fDate(emp.hire_date) : '—'],
+          ['Contrat', emp?.contract_type || '—'],
+          ['Horaire', `${emp?.weekly_hours || '—'}h/sem`],
+          ['N° AVS', emp?.avs_number || '—'],
+          ['Permis', emp?.permit_type || '—'],
+        ].map(([k, v]) => (
+          <div key={k} style={{ display:'flex', justifyContent:'space-between',
+            padding:'7px 0', borderBottom:'1px solid var(--b1)', fontSize:12 }}>
+            <span style={{ color:'var(--tm)' }}>{k}</span>
+            <span style={{ fontWeight:600 }}>{String(v)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Alerte permis */}
+      {permitExpiring && (
+        <div style={{ padding:'12px 14px', background:'rgba(239,68,68,.07)',
+          border:'1px solid rgba(239,68,68,.2)', borderRadius:10, fontSize:12 }}>
+          <strong>⚠️ Permis de travail</strong> — expire le {fDate(emp.permit_expiry)}.
+          Contactez votre RH pour le renouvellement.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Bulletins ── */
+function PortalPayslips({ employeeId }: { employeeId: number }) {
+  const { data, loading, error } = useApi(() => apiFetch('/portal/payslips'));
+  const payslips = data?.payslips || [];
+  const [downloading, setDownloading] = useState<number | null>(null);
+
+  const downloadPdf = async (p: any) => {
+    setDownloading(p.id);
+    try {
+      const r = await fetch(`/api/salary/pdf/${employeeId}/${p.period_year}/${p.period_month}`, {
+        credentials: 'include',
+      });
+      if (!r.ok) { alert('PDF indisponible'); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulletin_${p.period_year}_${String(p.period_month).padStart(2,'0')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert('Erreur téléchargement'); }
+    setDownloading(null);
+  };
+
+  return (
+    <div style={{ padding:16 }}>
+      <ApiState loading={loading} error={error}>
+        {payslips.length === 0 ? (
+          <div style={{ textAlign:'center', padding:48 }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>💶</div>
+            <div style={{ fontWeight:700, marginBottom:6 }}>Aucun bulletin disponible</div>
+            <div style={{ fontSize:12, color:'var(--tm)' }}>Vos bulletins apparaîtront ici après chaque paie.</div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {payslips.map((p: any) => (
+              <div key={p.id} className="card" style={{ padding:'14px 16px',
+                display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:42, height:42, borderRadius:10,
+                  background:'rgba(49,118,166,.1)', display:'flex',
+                  alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+                  📄
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13 }}>
+                    {MONTHS_FR[p.period_month - 1]} {p.period_year}
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--tm)' }}>
+                    Net <span className="mono" style={{ fontWeight:700, color:'var(--blue)' }}>
+                      CHF {Number(p.net_salary).toFixed(2)}
+                    </span>
+                    {' · '}Brut <span className="mono">{Number(p.gross_salary).toFixed(2)}</span>
+                  </div>
+                </div>
+                <button onClick={() => downloadPdf(p)} disabled={downloading === p.id}
+                  className="btn btn-g" style={{ padding:'7px 12px', fontSize:11, flexShrink:0 }}>
+                  {downloading === p.id ? <Spinner size={12}/> : '⬇ PDF'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </ApiState>
+    </div>
+  );
+}
+
+/* ── Absences ── */
+function PortalAbsences() {
+  const { data, loading, error } = useApi(() => apiFetch('/portal/absences'));
+  const absences = data?.absences || [];
+
+  const statusBadge = (s: string) => {
+    const map: Record<string, any> = {
+      approved: { bg:'rgba(16,185,129,.1)', color:'var(--green)', label:'✓ Approuvé' },
+      pending:  { bg:'rgba(245,158,11,.1)', color:'var(--amber)', label:'⏳ En attente' },
+      rejected: { bg:'rgba(239,68,68,.1)',  color:'var(--red)',   label:'✗ Refusé' },
+      cancelled:{ bg:'var(--surf2)',         color:'var(--tm)',    label:'Annulé' },
+    };
+    const m = map[s] || { bg:'var(--surf2)', color:'var(--tm)', label:s };
+    return (
+      <span className="badge" style={{ background:m.bg, color:m.color }}>{m.label}</span>
+    );
+  };
+
+  return (
+    <div style={{ padding:16 }}>
+      <ApiState loading={loading} error={error}>
+        {absences.length === 0 ? (
+          <div style={{ textAlign:'center', padding:48 }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>📅</div>
+            <div style={{ fontWeight:700, marginBottom:6 }}>Aucune absence enregistrée</div>
+            <div style={{ fontSize:12, color:'var(--tm)' }}>Utilisez l'onglet "Demande" pour soumettre une demande.</div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {absences.map((a: any) => (
+              <div key={a.id} className="card" style={{ padding:'14px 16px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+                  <div style={{ fontWeight:700, fontSize:13 }}>
+                    {ABSENCE_LABELS[a.absence_type] || a.absence_type}
+                  </div>
+                  {statusBadge(a.status)}
+                </div>
+                <div style={{ fontSize:11, color:'var(--tm)' }}>
+                  {fDate(a.start_date)} → {fDate(a.end_date)} · {a.working_days}j ouvrables
+                </div>
+                {a.reason && (
+                  <div style={{ fontSize:11, color:'var(--t2)', marginTop:4 }}>
+                    {a.reason}
+                  </div>
+                )}
+                {a.approver_first && a.status !== 'pending' && (
+                  <div style={{ fontSize:10, color:'var(--tm)', marginTop:4 }}>
+                    Par {a.approver_first} {a.approver_last}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </ApiState>
+    </div>
+  );
+}
+
+/* ── Demande de congé ── */
+function PortalLeaveRequest({ onSubmitted }: { onSubmitted: () => void }) {
+  const [form, setForm] = useState({
+    absenceType: 'vacation',
+    startDate: '',
+    endDate: '',
+    reason: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const workingDays = useMemo(() => {
+    if (!form.startDate || !form.endDate) return 0;
+    const start = new Date(form.startDate);
+    const end   = new Date(form.endDate);
+    if (end < start) return 0;
+    let d = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) d++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return d;
+  }, [form.startDate, form.endDate]);
+
+  const submit = async () => {
+    if (!form.startDate || !form.endDate) { setErr('Dates requises'); return; }
+    if (new Date(form.endDate) < new Date(form.startDate)) { setErr('Date fin doit être après date début'); return; }
+    setSaving(true); setErr('');
+    try {
+      await apiFetch('/portal/leave', 'POST', form);
+      setSuccess(true);
+      setTimeout(() => { setSuccess(false); onSubmitted(); }, 1800);
+    } catch (e: any) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  if (success) return (
+    <div style={{ padding:40, textAlign:'center' }}>
+      <div style={{ fontSize:56, marginBottom:16 }}>✅</div>
+      <div style={{ fontWeight:800, fontSize:18 }}>Demande envoyée !</div>
+      <div style={{ fontSize:12, color:'var(--tm)', marginTop:8 }}>
+        Votre responsable RH recevra la demande et vous tiendra informé.
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding:16 }}>
+      <div className="card" style={{ padding:20 }}>
+        <div style={{ fontWeight:700, fontSize:15, marginBottom:18 }}>✉️ Nouvelle demande</div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em',
+            color:'var(--tm)', display:'block', marginBottom:4 }}>Type</label>
+          <select className="inp" value={form.absenceType} onChange={e => set('absenceType', e.target.value)}>
+            {Object.entries(ABSENCE_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+          {(['startDate', 'endDate'] as const).map((k, i) => (
+            <div key={k}>
+              <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em',
+                color:'var(--tm)', display:'block', marginBottom:4 }}>{i === 0 ? 'Début' : 'Fin'}</label>
+              <input className="inp" type="date" value={form[k]}
+                onChange={e => set(k, e.target.value)}/>
+            </div>
+          ))}
+        </div>
+
+        {workingDays > 0 && (
+          <div style={{ padding:'10px 14px', background:'rgba(49,118,166,.07)',
+            border:'1px solid rgba(49,118,166,.15)', borderRadius:8, marginBottom:14,
+            fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:20 }}>📊</span>
+            <span><strong className="mono">{workingDays}</strong> jour{workingDays > 1 ? 's' : ''} ouvrable{workingDays > 1 ? 's' : ''}</span>
+          </div>
+        )}
+
+        <div style={{ marginBottom:18 }}>
+          <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em',
+            color:'var(--tm)', display:'block', marginBottom:4 }}>Motif (optionnel)</label>
+          <textarea className="inp" value={form.reason} onChange={e => set('reason', e.target.value)}
+            rows={3} placeholder="Vacances, rendez-vous médical..."
+            style={{ resize:'vertical' }}/>
+        </div>
+
+        {err && (
+          <div style={{ color:'var(--red)', fontSize:12, marginBottom:12 }}>⚠ {err}</div>
+        )}
+
+        <button className="btn btn-p" style={{ width:'100%', justifyContent:'center',
+          padding:'12px 0', fontSize:13 }}
+          onClick={submit} disabled={saving}>
+          {saving ? <Spinner size={16}/> : '📤 Envoyer la demande'}
+        </button>
+
+        <div style={{ marginTop:12, fontSize:10, color:'var(--tm)', textAlign:'center', lineHeight:1.6 }}>
+          Votre demande sera transmise à votre gestionnaire RH.<br/>
+          Vous recevrez une confirmation par email une fois traitée.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ EMPLOYEE PORTAL — composant principal ════════════════════════ */
+function EmployeePortal({ user, onLogout }: { user: any, onLogout: () => void }) {
+  const w = useW();
+  const [tab, setTab] = useState('home');
+  const { data: meData, loading: meLoading, reload: reloadMe } = useApi(() => apiFetch('/portal/me'));
+
+  const emp     = meData?.employee || null;
+  const balance = meData?.balance  || null;
+  const year    = new Date().getFullYear();
+
+  const handleAbsenceSubmitted = () => {
+    setTab('absences');
+    reloadMe();
+  };
+
+  return (
+    <>
+      {/* Header fixe */}
+      <div>
+        {meLoading ? (
+          <div style={{ background:'var(--sb)', padding:'40px 20px', textAlign:'center' }}>
+            <Spinner size={24} color="#fff"/>
+          </div>
+        ) : (
+          <PortalHeader emp={emp} onLogout={onLogout}/>
+        )}
+        <PortalTabBar tab={tab} setTab={setTab}/>
+      </div>
+
+      {/* Contenu scrollable */}
+      <div style={{ flex:1, overflowY:'auto', paddingBottom: 16 }}>
+        {tab === 'home'     && <PortalHome emp={emp} balance={balance} year={year}/>}
+        {tab === 'payslips' && <PortalPayslips employeeId={meData?.employee?.id || user.employeeId}/>}
+        {tab === 'absences' && <PortalAbsences/>}
+        {tab === 'request'  && <PortalLeaveRequest onSubmitted={handleAbsenceSubmitted}/>}
+      </div>
+    </>
+  );
+}
+
+
 /* ══ SETUP WIZARD (1er démarrage) ═══════════════════════ */
 function SetupWizard({ onDone }) {
   const [step, setStep] = useState(1);
@@ -3325,6 +3746,18 @@ export default function AppShell() {
     setUser(null); setAuthState('login');
   };
 
+  // Portail employé : redirection auto si rôle employee
+  if (user?.role === 'employee') {
+    return (
+      <><style>{CSS}</style>
+        <div style={{ display:'flex', flexDirection:'column', height:'100vh',
+          background:'var(--bg)', overflow:'hidden' }}>
+          <EmployeePortal user={user} onLogout={logout}/>
+        </div>
+      </>
+    );
+  }
+
   const PAGES = {
     dashboard: <Dashboard user={user}/>,
     employees: <Employees/>,
@@ -3336,6 +3769,14 @@ export default function AppShell() {
     reports:   <Reports/>,
     settings:  <Settings/>,
     terminations: <Terminations/>,
+    portal_preview: <div style={{flex:1,overflowY:'auto',background:'var(--bg)'}}>
+      <div style={{padding:'10px 20px',background:'rgba(49,118,166,.07)',borderBottom:'1px solid var(--b1)',fontSize:11,color:'var(--blue)',fontWeight:700}}>
+        👁 Prévisualisation — Portail Employé
+      </div>
+      <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 41px)',overflowY:'auto',background:'var(--bg)'}}>
+        <EmployeePortal user={user} onLogout={logout}/>
+      </div>
+    </div>,
     documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail."/>,
   };
 
