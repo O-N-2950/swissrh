@@ -1,5 +1,5 @@
 # SwissRH — Contexte Projet
-_Dernière mise à jour : 2026-03-12 (session 5 — portail employé)_
+_Dernière mise à jour : 2026-03-12 (session 6 — emails Resend)_
 
 ## Écosystème Neukomm Group
 - **Holding** : Neukomm Group (neukomm-group.ch)
@@ -8,7 +8,7 @@ _Dernière mise à jour : 2026-03-12 (session 5 — portail employé)_
 - **Repo GitHub** : O-N-2950/swissrh
 - **Stack** : Node.js + TypeScript + Express / PostgreSQL / React + Vite + Tailwind
 - **Deploy** : Railway (token: ca6cccac-4eb0-4161-8ece-e93917feac77)
-- **URL prod** : https://swissrh.ch (DNS en propagation) + https://swissrh-app-production.up.railway.app
+- **URL prod** : https://swissrh.ch (DNS propagé) + https://swissrh-app-production.up.railway.app
 - **SSO partagé** : Magic Link WinWin ↔ SwissRH (cookie `srh_session` JWT)
 - **Workspace Railway** : 3bcd3c2b-04d6-4979-95ff-c5862f606fd2
 - **Project ID** : 4fb18dc7-c2da-4658-8b26-7b092ca8ed95
@@ -19,12 +19,12 @@ _Dernière mise à jour : 2026-03-12 (session 5 — portail employé)_
 
 ## État réel — 2026-03-12 ✅ EN PRODUCTION
 
-### Backend — 13 modules + portail
+### Backend — 13 modules + portail + emails
 
 | Module | Fichier | Endpoints |
-|--------|---------|-----------|
+|--------|---------|-----------| 
 | Employees | server/api/employees.ts | 6 (CRUD + AES-256 AVS) |
-| Salary | server/api/salary.ts | 4 (calcul + payslips + batch) |
+| Salary | server/api/salary.ts | 5 (calcul + payslips + batch + **payroll-notify**) |
 | Absences | server/api/absences.ts | 14 (approve/reject/balances/alerts) |
 | Time | server/api/timeentries.ts | 6 (pointage LTr + DEXTRA) |
 | Reports | server/api/reports.ts | 2 (dashboard KPI + AVS) |
@@ -38,16 +38,18 @@ _Dernière mise à jour : 2026-03-12 (session 5 — portail employé)_
 | **Employee Portal** | **server/api/employee-portal.ts** | **5 (me, payslips, absences, leave, balance)** |
 | Seed demo | server/db/seed-demo.ts | POST /api/admin/seed-demo |
 
-### Routes API Portal
-- `GET  /api/portal/me`          — profil employé + solde vacances
-- `GET  /api/portal/payslips`    — mes bulletins (36 derniers)
-- `GET  /api/portal/absences`    — mes absences + statut
-- `POST /api/portal/leave`       — soumettre une demande de congé
-- `GET  /api/portal/balance/:year` — solde détaillé par année
+### Emails Resend — server/utils/email.ts ✅ SESSION 6
+5 templates HTML branded SwissRH :
+1. `sendLeaveRequestToRH` — congé soumis → RH (hook: POST /portal/leave)
+2. `sendLeaveDecisionToEmployee` — approuvé/refusé → employé (hook: PUT /absences/:id/approve|reject)
+3. `sendPermitExpiryAlert` — J-30 / J-7 permis expirant → admin (scheduler 8h00)
+4. `sendPayrollLaunched` — paie lancée → admin (hook: POST /salary/payroll-notify)
+5. `sendPayslipReady` — bulletin dispo → employé (hook: POST /salary/payroll-notify?notifyEmployees=true)
 
-### Auth — JWT enrichi
-Le JWT inclut désormais `employeeId` (résolution auto par email à la connexion).
-Rôle `employee` → redirection automatique vers le portail mobile-first.
+### Alertes permis — server/utils/permit-alerts.ts ✅ SESSION 6
+- Scheduler quotidien à 8h00 (`startPermitAlerts()`)
+- Vérifie permis expirant J-30 et J-7 pour toutes les entreprises
+- Email groupé par admin/entreprise
 
 ### Moteur de salaire — swiss-salary-v2.ts + sector-contributions.ts
 
@@ -97,13 +99,14 @@ admin@demo.ch / Demo2025! · Dupont Industries Sàrl JU · 5 employés
 
 ## Git log récent
 ```
+61719c5  feat: start permit alerts scheduler on startup
+65fa2571 feat: POST /salary/payroll-notify — email admin + employees
+1f2d6f4d feat: email leave request → RH on portal POST /leave
+6429c558 feat: email approve/reject absences → employee (Resend)
+08097c82 feat: permit expiry alerts — daily 8h00 check
+764d9b67 feat: email service Resend — 5 templates HTML branded
 ddf7c6d  fix: unterminated string literal in server/index.ts
-d161b3b  feat: employee portal mobile-first (home, payslips, absences, leave)
-3693b8a  feat: register portalRouter in server/index.ts
-319372f  fix: include employeeId in JWT at login (portal)
-00bae8c  feat: employee portal API (me, payslips, absences, leave request)
-34f6509  feat: add Terminations page (CO 335c/336c)
-76e4f53  fix: call migrateTerminations() at startup
+d161b3b  feat: employee portal mobile-first
 ```
 
 ---
