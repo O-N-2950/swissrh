@@ -16,7 +16,9 @@
 // ===== GLOBAL CRASH PROTECTION — NE JAMAIS LAISSER LE PROCESS MOURIR =====
 process.on('uncaughtException', (err) => {
   try { console.error('🔴 [UNCAUGHT EXCEPTION] (server survived):', err?.message || err); } catch {}
-  try { console.error(err?.stack?.split('\n').slice(0, 4).join('\n')); } catch {}
+  try { console.error(err?.stack?.split('
+').slice(0, 4).join('
+')); } catch {}
   // NE PAS appeler process.exit() — le serveur continue
 });
 process.on('unhandledRejection', (reason: any) => {
@@ -48,6 +50,7 @@ import { gdprRouter }               from './api/gdpr.js';
 import { ssoRouter }                from './auth/sso.js';      // SSO WinWin
 import { terminationsRouter }      from './api/terminations.js';
 import { migrateTerminations }     from './db/migrate-terminations.js';
+import { portalRouter }            from './api/employee-portal.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -84,6 +87,7 @@ app.use('/api/company',    requireAuth, companyRouter);
 app.use('/api/exports',    requireAuth, exportRouter);   // exports sécurisés (CRITIQUE 5)
 app.use('/api/gdpr',       requireAuth, gdprRouter);     // nLPD (CRITIQUE 7)
 app.use('/api/terminations', requireAuth, terminationsRouter); // CO 336c licenciements
+app.use('/api/portal',       requireAuth, portalRouter);       // Employee portal
 app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
