@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sendPayrollLaunched, sendPayslipReady } from '../utils/email.js';
 import { getSQL } from '../db/pool.js';
 import { calculateSalary, parseTimeInput } from '../utils/swiss-salary.js';
 
@@ -117,4 +118,105 @@ salaryRouter.post('/time/parse', (req, res) => {
   const hours = Math.floor(result);
   const minutes = Math.round((result - hours) * 60);
   res.json({ ok: true, centesimals: result, hours, minutes, str: `${hours}h${String(minutes).padStart(2, '0')}` });
+});
+
+// ─────────────────────────────────────────────────────────
+// POST /api/salary/payroll-notify — Email admin après batch
+// Appelé par le frontend après "Lancer la paie" complet
+// ─────────────────────────────────────────────────────────
+salaryRouter.post('/payroll-notify', async (req, res) => {
+  try {
+    const { companyId } = (req as any).user;
+    const sql = getSQL();
+    const { periodYear, periodMonth, notifyEmployees = false } = req.body;
+
+    if (!periodYear || !periodMonth) {
+      return res.status(400).json({ error: 'periodYear et periodMonth requis' });
+    }
+
+    // Récupérer statistiques de la paie
+    const [stats] = await sql`
+      SELECT
+        COUNT(*)::int              as employee_count,
+        SUM(gross_salary)::float   as total_gross,
+        SUM(net_salary)::float     as total_net,
+        SUM(total_cost)::float     as total_cost
+      FROM payslips
+      WHERE company_id = ${companyId}
+        AND period_year = ${periodYear}
+        AND period_month = ${periodMonth}
+    `;
+
+    if (!stats || stats.employee_count === 0) {
+      return res.status(404).json({ error: 'Aucun bulletin trouvé pour cette période' });
+    }
+
+    // Admin de l'entreprise
+    const [admin] = await sql`
+      SELECT u.email, u.first_name, c.name as company_name
+      FROM users u
+      JOIN companies c ON c.id = ${companyId}
+      WHERE u.company_id = ${companyId}
+        AND u.role = 'admin'
+        AND u.is_active = true
+      LIMIT 1
+    `;
+
+    let emailSent = false;
+    if (admin?.email) {
+      const result = await sendPayrollLaunched({
+        adminEmail:     admin.email,
+        adminName:      admin.first_name,
+        companyName:    admin.company_name,
+        periodYear:     parseInt(periodYear),
+        periodMonth:    parseInt(periodMonth),
+        employeeCount:  stats.employee_count,
+        totalGross:     stats.total_gross || 0,
+        totalNet:       stats.total_net   || 0,
+        totalCost:      stats.total_cost  || 0,
+      });
+      emailSent = result.ok;
+    }
+
+    // Optionnel : notifier chaque employé que son bulletin est dispo
+    let employeeNotifs = 0;
+    if (notifyEmployees) {
+      const payslips = await sql`
+        SELECT p.id, p.gross_salary, p.net_salary,
+               e.email, e.first_name
+        FROM payslips p
+        JOIN employees e ON e.id = p.employee_id
+        WHERE p.company_id = ${companyId}
+          AND p.period_year = ${periodYear}
+          AND p.period_month = ${periodMonth}
+          AND e.email IS NOT NULL
+      `;
+      for (const ps of payslips) {
+        sendPayslipReady({
+          employeeEmail:      ps.email,
+          employeeFirstName:  ps.first_name,
+          periodYear:         parseInt(periodYear),
+          periodMonth:        parseInt(periodMonth),
+          grossSalary:        ps.gross_salary,
+          netSalary:          ps.net_salary,
+          payslipId:          ps.id,
+        }).catch(() => {});
+        employeeNotifs++;
+      }
+    }
+
+    res.json({
+      ok: true,
+      emailSent,
+      stats: {
+        employeeCount: stats.employee_count,
+        totalGross:    stats.total_gross,
+        totalNet:      stats.total_net,
+        totalCost:     stats.total_cost,
+      },
+      employeeNotifs,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
