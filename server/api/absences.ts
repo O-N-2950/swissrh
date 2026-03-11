@@ -19,6 +19,8 @@ import {
   getHolidaysForCanton,
 } from '../utils/swiss-salary-v2.js';
 
+import { sendLeaveDecisionToEmployee } from '../utils/email.js';
+
 export const absencesRouter = Router();
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -182,6 +184,32 @@ absencesRouter.put('/:id/approve', async (req, res) => {
         new Date(absence.start_date).getFullYear(), absence.working_days, 'take');
     }
 
+    // Email décision → employé (fire-and-forget)
+    try {
+      const [emp] = await sql`
+        SELECT e.email, e.first_name,
+               u.first_name as approver_first, u.last_name as approver_last
+        FROM employees e
+        LEFT JOIN users u ON u.id = ${userId}
+        WHERE e.id = ${absence.employee_id}
+        LIMIT 1
+      `;
+      if (emp?.email) {
+        sendLeaveDecisionToEmployee({
+          employeeEmail:     emp.email,
+          employeeFirstName: emp.first_name,
+          absenceType:       absence.absence_type,
+          startDate:         absence.start_date,
+          endDate:           absence.end_date,
+          workingDays:       absence.working_days,
+          decision:          'approved',
+          approverName:      emp.approver_first
+            ? `${emp.approver_first} ${emp.approver_last}`
+            : undefined,
+        }).catch(() => {});
+      }
+    } catch { /* email non-bloquant */ }
+
     res.json({ ok: true, absence });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -203,6 +231,27 @@ absencesRouter.put('/:id/reject', async (req, res) => {
       RETURNING *
     `;
     if (!absence) return res.status(404).json({ error: 'Demande introuvable' });
+
+    // Email refus → employé (fire-and-forget)
+    try {
+      const [emp] = await sql`
+        SELECT email, first_name FROM employees
+        WHERE id = ${absence.employee_id} LIMIT 1
+      `;
+      if (emp?.email) {
+        sendLeaveDecisionToEmployee({
+          employeeEmail:     emp.email,
+          employeeFirstName: emp.first_name,
+          absenceType:       absence.absence_type,
+          startDate:         absence.start_date,
+          endDate:           absence.end_date,
+          workingDays:       absence.working_days,
+          decision:          'rejected',
+          rejectionReason:   reason || 'Demande refusée',
+        }).catch(() => {});
+      }
+    } catch { /* email non-bloquant */ }
+
     res.json({ ok: true, absence });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -629,3 +678,4 @@ function getAbsenceRules(type: string, days: number) {
 
   return rules;
 }
+
