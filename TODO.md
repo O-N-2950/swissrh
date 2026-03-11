@@ -1,9 +1,9 @@
 # SwissRH — TODO List
-_Mis à jour : 2026-03-12 (session 5 — portail employé livré)_
+_Mis à jour : 2026-03-12 (session 6 — emails Resend livrés)_
 
 ---
 
-## ✅ ACQUIS (sessions 1–5)
+## ✅ ACQUIS (sessions 1–6)
 
 | Couche | État |
 |--------|------|
@@ -26,20 +26,30 @@ _Mis à jour : 2026-03-12 (session 5 — portail employé livré)_
 | Licenciements CO 335c/336c (full UI) | ✅ |
 | Railway deploy + CI/CD GitHub | ✅ |
 | DNS swissrh.ch → Railway | ✅ |
-| **Portail employé mobile-first** | ✅ **SESSION 5** |
-| **JWT enrichi avec employeeId** | ✅ **SESSION 5** |
-| **API /api/portal (5 routes)** | ✅ **SESSION 5** |
+| Portail employé mobile-first | ✅ SESSION 5 |
+| JWT enrichi avec employeeId | ✅ SESSION 5 |
+| API /api/portal (5 routes) | ✅ SESSION 5 |
+| **Emails Resend — 5 templates branded** | ✅ **SESSION 6** |
+| **sendLeaveRequestToRH** | ✅ **SESSION 6** |
+| **sendLeaveDecisionToEmployee** | ✅ **SESSION 6** |
+| **sendPermitExpiryAlert (J-30/J-7)** | ✅ **SESSION 6** |
+| **sendPayrollLaunched** | ✅ **SESSION 6** |
+| **sendPayslipReady** | ✅ **SESSION 6** |
+| **Scheduler permis quotidien 8h00** | ✅ **SESSION 6** |
+| **POST /salary/payroll-notify** | ✅ **SESSION 6** |
 
 ---
 
-## 🟠 SPRINT 1 — Compléter le portail (priorité max)
+## 🟠 SPRINT 1 — Compléter le portail
 
 ### 1. Emails Resend — alertes critiques
-- [ ] Notification demande de congé soumise → RH (email)
-- [ ] Confirmation congé approuvé/refusé → employé
-- [ ] Alerte permis de travail expirant (J-30, J-7) → admin
-- [ ] Notification paie lancée → admin
-- [ ] Template HTML branded SwissRH (logo + couleurs)
+- [x] Notification demande de congé soumise → RH (email)
+- [x] Confirmation congé approuvé/refusé → employé
+- [x] Alerte permis de travail expirant (J-30, J-7) → admin
+- [x] Notification paie lancée → admin
+- [x] Template HTML branded SwissRH (logo + couleurs)
+- [ ] **Hooker POST /salary/payroll-notify dans le frontend (Payroll page)**
+- [ ] Toggle "Notifier les employés" sur la page Payroll
 
 ### 2. Calendrier absences visuel
 - [ ] Vue mois (grille) avec absences colorées par employé
@@ -47,7 +57,6 @@ _Mis à jour : 2026-03-12 (session 5 — portail employé livré)_
 - [ ] Drag & drop pour modifier dates
 
 ### 3. Amélioration portail employé
-- [ ] Notification push / email de confirmation après demande de congé
 - [ ] Accès pointage (voir ses entrées time tracking)
 - [ ] Vue Lohnausweis annuel (résumé fiscal employé)
 - [ ] Mode sombre (toggle)
@@ -130,7 +139,8 @@ _Mis à jour : 2026-03-12 (session 5 — portail employé livré)_
 | Moteur calcul Swissdec | ✅ | ✅ | ✅ | ✅ |
 | 9 secteurs CCT | ✅ | ✅ | ⚠️ | ⚠️ |
 | IS barèmes complets | ✅ | ✅ | ✅ | ✅ |
-| Portail employé mobile | ✅ **NOUVEAU** | ✅ | ✅ | ⚠️ |
+| Portail employé mobile | ✅ | ✅ | ✅ | ⚠️ |
+| Emails notifications | ✅ **NOUVEAU** | ✅ | ✅ | ⚠️ |
 | Licenciements CO 336c | ✅ | ❌ | ❌ | ❌ |
 | Export ELM XML | ❌ **manque** | ✅ | ✅ | ✅ |
 | Multi-mandants | ❌ **manque** | ✅ | ✅ | ✅ |
