@@ -13,6 +13,7 @@ import { getSQL } from '../db/pool.js';
 import { requireAuth, type JwtPayload } from '../auth/middleware.js';
 import { decrypt, maskAvs } from '../utils/encryption.js';
 import { audit, getIp } from '../utils/audit-log.js';
+import { sendLeaveRequestToRH } from '../utils/email.js';
 
 export const portalRouter = Router();
 
@@ -190,6 +191,40 @@ portalRouter.post('/leave', requireAuth, async (req, res) => {
       ipAddress: getIp(req),
     });
 
+    // Email notification → RH (fire-and-forget)
+    try {
+      const [rhUser] = await sql`
+        SELECT u.email, u.first_name, u.last_name, c.name as company_name
+        FROM users u
+        JOIN companies c ON c.id = ${user.companyId}
+        WHERE u.company_id = ${user.companyId}
+          AND u.role IN ('admin', 'rh_manager')
+          AND u.is_active = true
+        ORDER BY CASE u.role WHEN 'admin' THEN 1 ELSE 2 END
+        LIMIT 1
+      `;
+      const [empData] = await sql`
+        SELECT first_name, last_name, email FROM employees
+        WHERE id = ${emp.id} LIMIT 1
+      `;
+      if (rhUser?.email && empData) {
+        sendLeaveRequestToRH({
+          rhEmail:            rhUser.email,
+          rhName:             rhUser.first_name,
+          employeeFirstName:  empData.first_name,
+          employeeLastName:   empData.last_name,
+          employeeEmail:      empData.email || user.email,
+          absenceType,
+          startDate,
+          endDate,
+          workingDays,
+          reason:             reason || undefined,
+          absenceId:          absence.id,
+          companyName:        rhUser.company_name,
+        }).catch(() => {});
+      }
+    } catch { /* email non-bloquant */ }
+
     res.json({ ok: true, absence });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -224,3 +259,4 @@ portalRouter.get('/balance/:year', requireAuth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
