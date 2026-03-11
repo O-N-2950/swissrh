@@ -49,6 +49,7 @@ import { ssoRouter }                from './auth/sso.js';      // SSO WinWin
 import { terminationsRouter }      from './api/terminations.js';
 import { migrateTerminations }     from './db/migrate-terminations.js';
 import { portalRouter }            from './api/employee-portal.js';
+import { startPermitAlerts }         from './utils/permit-alerts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -150,6 +151,13 @@ async function start() {
     } catch (e: any) {
       console.error('⚠️  Crash monitor init error:', e.message);
     }
+
+    // Alertes permis de travail expirants (quotidien 8h00)
+    try {
+      startPermitAlerts();
+    } catch (e: any) {
+      console.error('⚠️  Permit alerts init error:', e.message);
+    }
   }
 
   // Pool keepalive — prevent Railway idle disconnections (pattern WIN WIN)
@@ -174,3 +182,4 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // cache-bust: 1773133617
+
