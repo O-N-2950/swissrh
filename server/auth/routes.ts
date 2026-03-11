@@ -27,11 +27,25 @@ authRouter.post('/login', async (req, res) => {
     // Update last login
     await sql`UPDATE users SET last_login = NOW() WHERE id = ${user.id}`;
 
+    // Récupérer l'employeeId si rôle employee (ou s'il existe un employé lié par email)
+    let employeeId: number | undefined;
+    try {
+      const [emp] = await sql`
+        SELECT id FROM employees
+        WHERE company_id = ${user.company_id}
+          AND LOWER(email) = ${email.toLowerCase()}
+          AND is_active = true
+        LIMIT 1
+      `;
+      if (emp) employeeId = emp.id;
+    } catch {}
+
     const token = signToken({
       userId: user.id,
       email: user.email,
       role: user.role,
       companyId: user.company_id,
+      ...(employeeId ? { employeeId } : {}),
     });
 
     res.cookie('srh_session', token, {
@@ -51,6 +65,7 @@ authRouter.post('/login', async (req, res) => {
         lastName: user.last_name,
         companyId: user.company_id,
         companyName: user.company_name,
+        employeeId,
       },
     });
   } catch (e: any) {
@@ -78,7 +93,21 @@ authRouter.get('/me', requireAuth, async (req, res) => {
       WHERE u.id = ${userId} AND u.is_active = true
     `;
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    res.json({ user });
+
+    // Récupérer l'employeeId si existant
+    let employeeId: number | undefined;
+    try {
+      const [emp] = await sql`
+        SELECT id FROM employees
+        WHERE company_id = ${user.company_id}
+          AND LOWER(email) = ${user.email.toLowerCase()}
+          AND is_active = true
+        LIMIT 1
+      `;
+      if (emp) employeeId = emp.id;
+    } catch {}
+
+    res.json({ user: { ...user, employeeId } });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
