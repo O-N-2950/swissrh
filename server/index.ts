@@ -16,9 +16,7 @@
 // ===== GLOBAL CRASH PROTECTION — NE JAMAIS LAISSER LE PROCESS MOURIR =====
 process.on('uncaughtException', (err) => {
   try { console.error('🔴 [UNCAUGHT EXCEPTION] (server survived):', err?.message || err); } catch {}
-  try { console.error(err?.stack?.split('
-').slice(0, 4).join('
-')); } catch {}
+  try { console.error(err?.stack?.split('\n').slice(0, 4).join('\n')); } catch {}
   // NE PAS appeler process.exit() — le serveur continue
 });
 process.on('unhandledRejection', (reason: any) => {
