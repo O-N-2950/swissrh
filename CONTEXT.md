@@ -1,5 +1,5 @@
 # SwissRH — Contexte Projet
-_Dernière mise à jour : 2026-03-10 (session 4)_
+_Dernière mise à jour : 2026-03-12 (session 5 — portail employé)_
 
 ## Écosystème Neukomm Group
 - **Holding** : Neukomm Group (neukomm-group.ch)
@@ -7,15 +7,19 @@ _Dernière mise à jour : 2026-03-10 (session 4)_
 - **Fondateur** : Olivier Neukomm
 - **Repo GitHub** : O-N-2950/swissrh
 - **Stack** : Node.js + TypeScript + Express / PostgreSQL / React + Vite + Tailwind
-- **Deploy cible** : Railway (token: ca6cccac-4eb0-4161-8ece-e93917feac77)
+- **Deploy** : Railway (token: ca6cccac-4eb0-4161-8ece-e93917feac77)
+- **URL prod** : https://swissrh.ch (DNS en propagation) + https://swissrh-app-production.up.railway.app
 - **SSO partagé** : Magic Link WinWin ↔ SwissRH (cookie `srh_session` JWT)
 - **Workspace Railway** : 3bcd3c2b-04d6-4979-95ff-c5862f606fd2
+- **Project ID** : 4fb18dc7-c2da-4658-8b26-7b092ca8ed95
+- **Service ID** : 7092882c-e18c-4a71-99b7-bcca6f0e69d5
+- **Env ID prod** : dcc78cf4-e5df-433b-837c-c732af537a47
 
 ---
 
-## État réel — 2026-03-10
+## État réel — 2026-03-12 ✅ EN PRODUCTION
 
-### ✅ Backend — PRODUCTION READY
+### Backend — 13 modules + portail
 
 | Module | Fichier | Endpoints |
 |--------|---------|-----------|
@@ -30,59 +34,83 @@ _Dernière mise à jour : 2026-03-10 (session 4)_
 | Auth | server/auth/routes.ts | 5 (login/logout/me/setup/setup-check) |
 | PDF Payslip | server/api/pdf-payslip.ts | 2 (PDFKit A4) |
 | SSO WinWin | server/auth/sso.ts | Magic Link JWT + nonces anti-replay |
+| Terminations | server/api/terminations.ts | 9 (CO 335c/336c complet) |
+| **Employee Portal** | **server/api/employee-portal.ts** | **5 (me, payslips, absences, leave, balance)** |
 | Seed demo | server/db/seed-demo.ts | POST /api/admin/seed-demo |
 
-### ✅ Moteur de salaire — swiss-salary-v2.ts + sector-contributions.ts
+### Routes API Portal
+- `GET  /api/portal/me`          — profil employé + solde vacances
+- `GET  /api/portal/payslips`    — mes bulletins (36 derniers)
+- `GET  /api/portal/absences`    — mes absences + statut
+- `POST /api/portal/leave`       — soumettre une demande de congé
+- `GET  /api/portal/balance/:year` — solde détaillé par année
+
+### Auth — JWT enrichi
+Le JWT inclut désormais `employeeId` (résolution auto par email à la connexion).
+Rôle `employee` → redirection automatique vers le portail mobile-first.
+
+### Moteur de salaire — swiss-salary-v2.ts + sector-contributions.ts
 
 **Standard (Swissdec 2025) :**
 AVS 5.3% · AI 0.7% · APG 0.225% · AC 1.1% (cap 12'350) · ACE 0.5%
 LPP par âge (7/10/15/18%) · LAA NP 1.3% · LAA P 0.8% · LAAC · IJM 0.75% · Alloc. fam. 1.4%
 
-**9 secteurs avec cotisations CCT spécifiques :**
-🏗 Construction : FAR 1.5% + Parifonds 0.3%+0.3% + SUVA majoré + 13e obligatoire
-🍽 Hôtellerie : REKA 1%+1% + Fonds L-GAV 0.7%+0.3% + LPP sectorielle + nuit dès 00h
-⚙️ MEM : Fonds 0.2% + 13e obligatoire
-🧹 Nettoyage : Fonds 0.6%+0.2% + nuit dès 20h
-✂️ Coiffure : Fonds 0.4%+0.1%
-🚛 Transport : FAR 1.3% + OTR2 + 13e
-🌾 Agriculture : Alloc. fam. majorées + 48h/sem
-🛍 Commerce : Salaires min cantonaux
-🏥 Santé/EMS : Fonds + nuit dès 22h + fériés x2 + 13e
+**9 secteurs CCT :** Construction · Hôtellerie · MEM · Nettoyage · Coiffure · Transport · Agriculture · Commerce · Santé/EMS
 
-**Impôt à la source :** Barèmes A/B/C/D/H × 5 cantons (ZH/BE/GE/VD/JU)
+**IS barèmes A/B/C/D/H × 5 cantons (ZH/BE/GE/VD/JU)**
 **13e salaire :** 3 modes (provision / décembre / juillet+décembre)
 **DEXTRA :** nuit/dimanche/fériés/HS par secteur CCT
-**Autres :** RHT · APG · décompte sortie · Lohnausweis 15 cases · CO 324a
 
-### ✅ Sécurité
+### Sécurité
 AES-256-GCM · JWT rôles (admin|rh_manager|employee) · audit log · nLPD · 47 tests vitest
 
-### ✅ Frontend — 9 pages câblées API réelle
+### Frontend — 10 pages admin + portail employé
+
+**Pages admin (sidebar) :**
 Dashboard actionnable · Employees CRUD · SalaryCalc 9 secteurs+IS+13e
 TimeTracking grille 7j+shifts+DEXTRA · Payroll + lancer la paie (flow 3 étapes)
 Absences approve/reject · Vacations · Reports CSV · Settings secteur
+Licenciements CO 335c/336c (TerminationNew · SickLeaveModal · TerminationDetail)
 
-### ✅ Auth
+**Portail employé mobile-first (rôle employee = accès auto) :**
+- 🏠 Accueil — KPIs vacances, dossier RH, alerte permis
+- 💶 Bulletins — liste + téléchargement PDF
+- 📅 Absences — historique + statuts colorés
+- ✉️ Demande — congé avec calcul jours ouvrables temps réel
+
+### Auth
 Session persistante · Setup Wizard · SSO WinWin · Logout
+Rôle `employee` → portail auto | Admin peut prévisualiser via sidebar
 
-### ✅ Seed demo
+### Seed demo
 admin@demo.ch / Demo2025! · Dupont Industries Sàrl JU · 5 employés
 
 ---
 
-## 🔴 SEUL BLOQUANT : Railway Deploy
-1. Créer projet Railway + service GitHub `O-N-2950/swissrh`
-2. Ajouter plugin PostgreSQL
-3. Injecter variables d'environnement (ci-dessous)
-4. 22 patches migration se jouent au 1er démarrage
-5. Pointer `swissrh.ch` → Railway
+## DNS swissrh.ch — CONFIGURÉ ✅
+- `www.swissrh.ch` → CNAME Railway ✅ validé
+- `swissrh.ch` → A record 66.33.22.5 ✅ propagé
+
+**Infomaniak :** Account ID 1569907 | Token API dans les memories
 
 ---
 
-## Variables d'environnement
-
+## Git log récent
 ```
-DATABASE_URL=postgresql://...
+ddf7c6d  fix: unterminated string literal in server/index.ts
+d161b3b  feat: employee portal mobile-first (home, payslips, absences, leave)
+3693b8a  feat: register portalRouter in server/index.ts
+319372f  fix: include employeeId in JWT at login (portal)
+00bae8c  feat: employee portal API (me, payslips, absences, leave request)
+34f6509  feat: add Terminations page (CO 335c/336c)
+76e4f53  fix: call migrateTerminations() at startup
+```
+
+---
+
+## Variables d'environnement (Railway prod)
+```
+DATABASE_URL=postgresql://...  (Railway plugin PostgreSQL)
 JWT_SECRET_KEY=<64 chars>
 ENCRYPTION_KEY=<64 hex>
 RESEND_API_KEY=re_...
@@ -90,16 +118,4 @@ WINWIN_SSO_SECRET=<même valeur sur winwin>
 SWISSRH_APP_URL=https://swissrh.ch
 WINWIN_APP_URL=https://winwin.swiss
 NODE_ENV=production
-```
-
----
-
-## Git log récent
-```
-2d06936  feat: cotisations sectorielles complètes — 9 CCT + IS + 13e + salaires min
-0fb1309  feat: secteurs + DEXTRA + shifts + lancer la paie + dashboard actionnable
-8116821  feat: session persistante + setup wizard + PDF payslips + seed demo
-59cd684  feat: frontend 100% câblé API
-e610beb  feat: SSO Magic Link WinWin ↔ SwissRH
-0041840  security: 7 critiques corrigées
 ```
