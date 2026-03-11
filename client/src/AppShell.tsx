@@ -405,6 +405,7 @@ const NAV = [
   { id:"vacations", em:"🏖", lb:"Vacances"       },
   { id:"time",      em:"⏱", lb:"Pointage"       },
   { id:"reports",   em:"📊", lb:"Rapports"       },
+  { id:"terminations", em:"⚖️", lb:"Licenciements" },
   { id:"documents", em:"📄", lb:"Documents"      },
   { id:"settings",  em:"⚙", lb:"Paramètres"     },
 ];
@@ -2661,6 +2662,471 @@ function Placeholder({ icon, title, desc }) {
 }
 
 
+/* ══════════════════════════════════════════════════════════
+   PAGE: LICENCIEMENTS — CO 335c + 336c Automatique
+   Gestion complète : délai de congé, suspension maladie,
+   plafond légal, IJM post-contrat, alertes
+══════════════════════════════════════════════════════════ */
+
+function TerminationNew({ employees, onClose, onSaved }: any) {
+  const [form, setForm] = useState({
+    employeeId: '', dismissalDate: '', endOfMonthNotice: true, reason: '', notes: ''
+  });
+  const [preview, setPreview] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const set = (k: string, v: any) => setForm(f => ({...f, [k]: v}));
+
+  const simulate = async () => {
+    if (!form.employeeId || !form.dismissalDate) return;
+    const emp = employees.find((e: any) => String(e.id) === String(form.employeeId));
+    if (!emp) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch('/terminations/calculate', 'POST', {
+        hireDate: emp.hire_date,
+        dismissalDate: form.dismissalDate,
+        endOfMonthNotice: form.endOfMonthNotice,
+        sickLeaves: []
+      });
+      setPreview(res.result);
+    } catch(e: any) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiFetch('/terminations', 'POST', {
+        employeeId: parseInt(form.employeeId),
+        dismissalDate: form.dismissalDate,
+        endOfMonthNotice: form.endOfMonthNotice,
+        reason: form.reason || null,
+        notes: form.notes || null
+      });
+      onSaved();
+    } catch(e: any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24, maxWidth:560 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div style={{ fontWeight:800, fontSize:16 }}>⚖️ Nouveau licenciement</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Collaborateur *</label>
+            <select className="inp" value={form.employeeId} onChange={e => { set('employeeId', e.target.value); setPreview(null); }}>
+              <option value="">— Sélectionner —</option>
+              {employees.map((e: any) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name} · {fDate(e.hire_date)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Date de remise du congé *</label>
+            <input className="inp" type="date" value={form.dismissalDate} onChange={e => { set('dismissalDate', e.target.value); setPreview(null); }}/>
+            <div style={{ fontSize:10, color:'var(--tm)', marginTop:3 }}>Date à laquelle la lettre de licenciement est remise</div>
+          </div>
+          <Toggle label="Terme fin de mois" hint="CO Art. 335c — Le délai court jusqu'à la fin du mois (usage courant)" val={form.endOfMonthNotice} set={v => { set('endOfMonthNotice', v); setPreview(null); }}/>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Motif</label>
+            <input className="inp" placeholder="Ex: Raisons économiques, restructuration…" value={form.reason} onChange={e => set('reason', e.target.value)}/>
+          </div>
+        </div>
+
+        {/* Simulation */}
+        {form.employeeId && form.dismissalDate && !preview && (
+          <button className="btn btn-g" style={{ width:'100%', justifyContent:'center', marginBottom:12 }}
+            onClick={simulate} disabled={loading}>
+            {loading ? <Spinner size={14}/> : '🔍 Simuler le calcul CO 335c / 336c'}
+          </button>
+        )}
+
+        {/* Preview résultat */}
+        {preview && (
+          <div style={{ background:'var(--surf2)', borderRadius:10, padding:16, marginBottom:16 }}>
+            <div style={{ fontWeight:800, fontSize:12, marginBottom:12, color:'var(--blue)' }}>📋 Calcul CO 335c / 336c</div>
+            <div className="g2" style={{ gap:8, marginBottom:12 }}>
+              {[
+                { l:'Ancienneté', v:`${preview.yearsEmployed} an(s) ${preview.monthsEmployed % 12} mois`, c:'var(--t1)' },
+                { l:'Délai de congé', v:`${preview.noticePeriodMonths} mois`, c:'var(--blue)' },
+                { l:'Terme initial', v:fDate(preview.initialEndDate), c:'var(--t1)' },
+                { l:'Terme effectif', v:fDate(preview.effectiveEndDate), c:'var(--green)' },
+                { l:'Plafond suspension', v:`${preview.maxSuspensionDays} jours max`, c:'var(--amber)' },
+                preview.ijmEndDate && { l:'IJM max', v:fDate(preview.ijmEndDate), c:'var(--purple)' },
+              ].filter(Boolean).map((k: any, i) => (
+                <div key={i} style={{ padding:'8px 10px', background:'var(--surf)', borderRadius:7 }}>
+                  <div style={{ fontSize:9, color:'var(--tm)', fontWeight:700 }}>{k.l}</div>
+                  <div className="mono" style={{ fontSize:13, fontWeight:900, color:k.c }}>{k.v}</div>
+                </div>
+              ))}
+            </div>
+            {/* Base légale */}
+            <div style={{ fontSize:10, color:'var(--tm)', borderTop:'1px solid var(--b1)', paddingTop:10 }}>
+              {preview.legalBasis?.map((l: string, i: number) => <div key={i}>• {l}</div>)}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+          <button className="btn btn-g" onClick={onClose}>Annuler</button>
+          <button className="btn btn-p" onClick={save} disabled={saving || !preview}>
+            {saving ? <Spinner size={14}/> : '✅ Enregistrer le licenciement'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SickLeaveModal({ terminationId, onClose, onSaved }: any) {
+  const [form, setForm] = useState({ startDate: '', endDate: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const set = (k: string, v: any) => setForm(f => ({...f, [k]: v}));
+
+  const save = async () => {
+    if (!form.startDate || !form.endDate) { alert('Dates requises'); return; }
+    setSaving(true);
+    try {
+      await apiFetch(`/terminations/${terminationId}/sick-leaves`, 'POST', {
+        startDate: form.startDate, endDate: form.endDate, notes: form.notes || null
+      });
+      onSaved();
+    } catch(e: any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24, maxWidth:420 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:16 }}>🏥 Arrêt maladie pendant délai</div>
+            <div style={{ fontSize:11, color:'var(--tm)', marginTop:2 }}>CO Art. 336c — Suspension automatique</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Début de l'arrêt *</label>
+            <input className="inp" type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)}/>
+          </div>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Fin de l'arrêt (dernier jour) *</label>
+            <input className="inp" type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)}/>
+          </div>
+          <div>
+            <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:'var(--tm)', display:'block', marginBottom:4 }}>Remarque</label>
+            <input className="inp" placeholder="Ex: Certificat reçu le…" value={form.notes} onChange={e => set('notes', e.target.value)}/>
+          </div>
+          <div style={{ padding:'10px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'var(--amber)' }}>
+            ⚠ Le délai de congé sera automatiquement suspendu pour la durée de cet arrêt (dans la limite du plafond légal). La date de fin de contrat sera recalculée immédiatement.
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:20 }}>
+          <button className="btn btn-g" onClick={onClose}>Annuler</button>
+          <button className="btn btn-p" onClick={save} disabled={saving}>
+            {saving ? <Spinner size={14}/> : '✅ Ajouter et recalculer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TerminationDetail({ term, onClose, onUpdated }: any) {
+  const [showSick, setShowSick] = useState(false);
+  const { data, loading, reload } = useApi(() => apiFetch(`/terminations/${term.id}`), [term.id]);
+  const t = data?.termination;
+
+  const ALERT_STYLES: any = {
+    info:    { bg:'var(--blued)',  border:'rgba(49,118,166,.2)',  icon:'ℹ️', c:'var(--blue)' },
+    warning: { bg:'var(--amberd)', border:'rgba(245,158,11,.2)',  icon:'⚠️', c:'var(--amber)' },
+    danger:  { bg:'var(--redd)',   border:'rgba(239,68,68,.2)',   icon:'🚨', c:'var(--red)' },
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:24, maxWidth:620 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:16 }}>{term.first_name} {term.last_name}</div>
+            <div style={{ fontSize:11, color:'var(--tm)', marginTop:2 }}>Licenciement — CO 335c / 336c</div>
+          </div>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowSick(true)}>+ Arrêt maladie</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+          </div>
+        </div>
+
+        {loading ? <div style={{ padding:32, textAlign:'center' }}><Spinner size={24}/></div> : t && (
+          <>
+            {/* KPIs clés */}
+            <div className="g3" style={{ gap:8, marginBottom:16 }}>
+              {[
+                { l:'Terme initial', v:fDate(t.initial_end_date), c:'var(--t1)' },
+                { l:'Terme effectif', v:fDate(t.effective_end_date), c: t.extended_by_days > 0 ? 'var(--amber)' : 'var(--green)', bold:true },
+                { l:'Suspension CO 336c', v: t.extended_by_days > 0 ? `+${t.extended_by_days}j` : 'Aucune', c: t.extended_by_days > 0 ? 'var(--amber)' : 'var(--green)' },
+                { l:'Plafond légal', v:`${t.max_suspension_days}j max`, c:'var(--blue)' },
+                { l:'Jours suspendus', v:`${t.total_suspended_days || 0}j / ${t.max_suspension_days}j`, c: (t.total_suspended_days || 0) >= t.max_suspension_days ? 'var(--red)' : 'var(--t1)' },
+                t.ijm_end_date && { l:'IJM jusqu\'au', v:fDate(t.ijm_end_date), c:'var(--purple)' },
+              ].filter(Boolean).map((k: any, i) => (
+                <div key={i} style={{ padding:'10px 12px', background:'var(--surf2)', borderRadius:8 }}>
+                  <div style={{ fontSize:9, color:'var(--tm)', fontWeight:700 }}>{k.l}</div>
+                  <div className="mono" style={{ fontSize:13, fontWeight: k.bold ? 900 : 700, color:k.c, marginTop:3 }}>{k.v}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Barre progression suspension */}
+            {t.max_suspension_days > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--tm)', marginBottom:4 }}>
+                  <span>Budget suspension CO 336c utilisé</span>
+                  <span className="mono" style={{ fontWeight:700 }}>{t.total_suspended_days || 0} / {t.max_suspension_days} jours</span>
+                </div>
+                <div className="prog" style={{ height:8 }}>
+                  <div className="prog-f" style={{
+                    width:`${Math.min(100, ((t.total_suspended_days||0) / t.max_suspension_days) * 100)}%`,
+                    background: (t.total_suspended_days||0) >= t.max_suspension_days ? 'var(--red)' : (t.total_suspended_days||0) > t.max_suspension_days * 0.7 ? 'var(--amber)' : 'var(--green)'
+                  }}/>
+                </div>
+                {(t.total_suspended_days||0) >= t.max_suspension_days && (
+                  <div style={{ fontSize:10, color:'var(--red)', fontWeight:700, marginTop:4 }}>
+                    🚨 Plafond atteint — le délai de congé reprend même en cas de maladie
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Alertes */}
+            {(t.alerts || []).length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+                {t.alerts.map((a: any, i: number) => {
+                  const s = ALERT_STYLES[a.type] || ALERT_STYLES.info;
+                  return (
+                    <div key={i} style={{ padding:'10px 12px', background:s.bg, border:`1px solid ${s.border}`, borderRadius:8, fontSize:11, color:s.c }}>
+                      {s.icon} {a.message}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Arrêts maladie */}
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:12, marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>🏥 Arrêts maladie pendant le délai de congé</span>
+                <span style={{ fontSize:10, color:'var(--tm)' }}>{(t.sickLeaves||[]).length} arrêt(s)</span>
+              </div>
+              {(t.sickLeaves||[]).length === 0 ? (
+                <div style={{ padding:'12px 14px', background:'var(--surf2)', borderRadius:8, fontSize:11, color:'var(--tm)', textAlign:'center' }}>
+                  Aucun arrêt maladie enregistré
+                </div>
+              ) : (t.sickLeaves||[]).map((sl: any, i: number) => {
+                const days = Math.round((new Date(sl.end_date).getTime() - new Date(sl.start_date).getTime()) / 86400000) + 1;
+                return (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                    background:'var(--surf2)', borderRadius:8, marginBottom:6, border:'1px solid var(--b1)' }}>
+                    <div style={{ width:3, alignSelf:'stretch', borderRadius:2, background:'var(--red)', flexShrink:0 }}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700, fontSize:12 }}>{fDate(sl.start_date)} → {fDate(sl.end_date)}</div>
+                      <div style={{ fontSize:10, color:'var(--tm)' }}>{days} jours calendaires{sl.notes ? ` · ${sl.notes}` : ''}</div>
+                    </div>
+                    <span className="badge" style={{ background:'rgba(239,68,68,.1)', color:'var(--red)' }}>{days}j</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Base légale */}
+            <div style={{ padding:'10px 14px', background:'var(--surf2)', borderRadius:8, fontSize:10, color:'var(--tm)' }}>
+              <div style={{ fontWeight:700, marginBottom:4 }}>⚖️ Base légale</div>
+              {(t.legal_basis || []).map((l: string, i: number) => <div key={i}>• {l}</div>)}
+            </div>
+          </>
+        )}
+
+        {showSick && (
+          <SickLeaveModal
+            terminationId={term.id}
+            onClose={() => setShowSick(false)}
+            onSaved={() => { setShowSick(false); reload(); onUpdated(); }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Terminations() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [showNew, setShowNew] = useState(false);
+  const [detail, setDetail] = useState<any>(null);
+
+  const { data: tData, loading, error, reload } = useApi(() => apiFetch('/terminations'));
+  const { data: empD } = useApi(() => apiFetch('/employees'));
+  const { data: alertsD } = useApi(() => apiFetch('/terminations/alerts'));
+
+  const terminations = tData?.terminations || [];
+  const employees = (empD?.employees || []).filter((e: any) => e.is_active);
+  const activeTerms = alertsD?.activeTerminations || [];
+
+  const daysUntil = (d: string) => {
+    const diff = new Date(d).getTime() - Date.now();
+    return Math.ceil(diff / 86400000);
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Licenciements CO 335c / 336c"
+        sub="Délai de congé · Suspension maladie · Plafond légal · IJM"
+        actions={
+          <button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowNew(true)}>
+            + Nouveau licenciement
+          </button>
+        }
+      />
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Rappel légal */}
+        <div style={{ padding:'12px 16px', background:'rgba(49,118,166,.05)', border:'1px solid rgba(49,118,166,.12)', borderRadius:10, fontSize:11, color:'var(--blue)' }}>
+          <strong>⚖️ Automatisations CO suisse :</strong>{' '}
+          Délai de congé calculé selon ancienneté (art. 335c) · Suspension automatique en cas de maladie (art. 336c) · Plafond légal 30/90/180j · Recalcul automatique du terme · IJM → 730j → AI
+        </div>
+
+        {/* Cas actifs avec alertes */}
+        {activeTerms.length > 0 && (
+          <div className="card" style={{ padding:16 }}>
+            <SH>⚡ Cas actifs — Termes à venir</SH>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {activeTerms.slice(0,5).map((t: any, i: number) => {
+                const du = daysUntil(t.effective_end_date);
+                const urgent = du <= 30;
+                return (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                    background: urgent ? 'rgba(239,68,68,.05)' : 'var(--surf2)',
+                    border: urgent ? '1px solid rgba(239,68,68,.2)' : '1px solid var(--b1)',
+                    borderRadius:8, cursor:'pointer' }}
+                    onClick={() => setDetail(t)}>
+                    <div style={{ width:7, height:7, borderRadius:'50%', flexShrink:0,
+                      background: du <= 7 ? 'var(--red)' : du <= 30 ? 'var(--amber)' : 'var(--green)' }}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700, fontSize:12 }}>{t.first_name} {t.last_name}</div>
+                      <div style={{ fontSize:10, color:'var(--tm)' }}>
+                        Terme effectif : {fDate(t.effective_end_date)}
+                        {t.extended_by_days > 0 && <span style={{ color:'var(--amber)', marginLeft:6 }}>⚠ +{t.extended_by_days}j suspension</span>}
+                      </div>
+                    </div>
+                    <div className="mono" style={{ fontSize:12, fontWeight:800, color: urgent ? 'var(--red)' : 'var(--t2)', flexShrink:0 }}>
+                      {du > 0 ? `J-${du}` : du === 0 ? 'Aujourd\'hui' : `J+${Math.abs(du)}`}
+                    </div>
+                    <span style={{ fontSize:12, color:'var(--tm)' }}>→</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Liste complète */}
+        <ApiState loading={loading} error={error}>
+          {terminations.length === 0 ? (
+            <div style={{ padding:48, textAlign:'center' }}>
+              <div style={{ fontSize:40, marginBottom:16 }}>⚖️</div>
+              <div style={{ fontWeight:800, fontSize:16, marginBottom:8 }}>Aucun licenciement enregistré</div>
+              <div style={{ fontSize:12, color:'var(--tm)', marginBottom:20 }}>
+                Enregistrez un licenciement pour que SwissRH calcule automatiquement le délai de congé,
+                gère les suspensions CO 336c et surveille les termes.
+              </div>
+              <button className="btn btn-p" style={{ fontSize:13, padding:'10px 20px' }} onClick={() => setShowNew(true)}>
+                + Premier licenciement
+              </button>
+            </div>
+          ) : (
+            <div className="card">
+              {w >= 700 && (
+                <div style={{ display:'grid', gridTemplateColumns:'2fr 100px 110px 110px 90px 90px 44px',
+                  gap:8, padding:'9px 16px', background:'var(--surf2)',
+                  borderBottom:'1px solid var(--b1)', borderRadius:'var(--r) var(--r) 0 0',
+                  fontSize:9, fontWeight:700, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--tm)' }}>
+                  {['Collaborateur','Congé donné','Terme initial','Terme effectif','Suspension','IJM',''].map(h => <div key={h}>{h}</div>)}
+                </div>
+              )}
+              {terminations.map((t: any, i: number) => {
+                const hasSuspension = (t.extended_by_days || 0) > 0;
+                const isCapped = (t.total_suspended_days || 0) >= t.max_suspension_days;
+                return (
+                  <div key={t.id} className="row" style={{ display: w >= 700 ? 'grid' : 'flex',
+                    gridTemplateColumns: w >= 700 ? '2fr 100px 110px 110px 90px 90px 44px' : undefined,
+                    flexDirection: w < 700 ? 'column' : undefined,
+                    gap:8, padding:'12px 16px', alignItems: w >= 700 ? 'center' : undefined,
+                    cursor:'pointer', animation:`slideUp .4s ${i*30}ms both` }}
+                    onClick={() => setDetail(t)}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:13 }}>{t.first_name} {t.last_name}</div>
+                      <div style={{ fontSize:10, color:'var(--tm)' }}>{t.department || '—'} · {t.notice_period_months}m délai</div>
+                    </div>
+                    <div className="mono" style={{ fontSize:12 }}>{fDate(t.dismissal_date)}</div>
+                    <div className="mono" style={{ fontSize:12, color:'var(--tm)' }}>{fDate(t.initial_end_date)}</div>
+                    <div className="mono" style={{ fontSize:12, fontWeight:800,
+                      color: hasSuspension ? 'var(--amber)' : 'var(--green)' }}>
+                      {fDate(t.effective_end_date)}
+                    </div>
+                    <div>
+                      {hasSuspension ? (
+                        <span className="badge" style={{ background: isCapped ? 'rgba(239,68,68,.1)' : 'rgba(245,158,11,.1)',
+                          color: isCapped ? 'var(--red)' : 'var(--amber)' }}>
+                          +{t.extended_by_days}j{isCapped ? ' ⚠ MAX' : ''}
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ background:'rgba(16,185,129,.1)', color:'var(--green)' }}>OK</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize:11, color: t.ijm_end_date ? 'var(--purple)' : 'var(--tm)' }}>
+                      {t.ijm_end_date ? fDate(t.ijm_end_date) : '—'}
+                    </div>
+                    <button className="btn btn-g" style={{ padding:'4px 8px', fontSize:10 }}
+                      onClick={e => { e.stopPropagation(); setDetail(t); }}>→</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ApiState>
+
+        {/* Mentions légales */}
+        <div style={{ padding:'10px 14px', background:'var(--surf2)', borderRadius:8, fontSize:10, color:'var(--tm)', lineHeight:1.7 }}>
+          <strong>⚖️ CO Art. 335c</strong> Délais : 1m (1ère année) · 2m (2e–9e année) · 3m (dès 10e année){' '}
+          <strong>|  CO Art. 336c</strong> Suspension : max 30j (1ère année) · 90j (2e–5e) · 180j (dès 6e){' '}
+          <strong>|  LCA/IJM</strong> 80% salaire dès J+31 · max 730j · puis AI
+        </div>
+      </div>
+
+      {showNew && (
+        <TerminationNew
+          employees={employees}
+          onClose={() => setShowNew(false)}
+          onSaved={() => { setShowNew(false); reload(); }}
+        />
+      )}
+
+      {detail && (
+        <TerminationDetail
+          term={detail}
+          onClose={() => setDetail(null)}
+          onUpdated={reload}
+        />
+      )}
+    </div>
+  );
+}
+
+
 /* ══ SETUP WIZARD (1er démarrage) ═══════════════════════ */
 function SetupWizard({ onDone }) {
   const [step, setStep] = useState(1);
@@ -2869,6 +3335,7 @@ export default function AppShell() {
     vacations: <Vacations/>,
     reports:   <Reports/>,
     settings:  <Settings/>,
+    terminations: <Terminations/>,
     documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail."/>,
   };
 
