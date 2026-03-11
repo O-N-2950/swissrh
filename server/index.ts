@@ -135,6 +135,7 @@ async function start() {
   await migrateSecurityPatches();
   await migrateSso();
   await migrateSectorDextra();
+  await migrateTerminations();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);
