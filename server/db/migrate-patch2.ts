@@ -109,7 +109,7 @@ export async function migratePatch2(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_vacation_bal_emp ON vacation_balances(employee_id, year)`;
 
   // ── PATCH 008 — absence_requests ──────────────────────────────────────
-  -- Couvre tous les types d'absences LTr + CO + LAA + APG
+  // Couvre tous les types d'absences LTr + CO + LAA + APG
   await sql`
     CREATE TABLE IF NOT EXISTS absence_requests (
       id                  SERIAL PRIMARY KEY,
@@ -190,8 +190,8 @@ export async function migratePatch2(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_absences_dates ON absence_requests(start_date, end_date)`;
 
   // ── PATCH 009 — public_holidays ───────────────────────────────────────
-  -- Jours fériés par canton — 26 cantons suisses
-  -- Chaque canton a ses propres fériés en plus des fériés fédéraux
+  // Jours fériés par canton — 26 cantons suisses
+  // Chaque canton a ses propres fériés en plus des fériés fédéraux
   await sql`
     CREATE TABLE IF NOT EXISTS public_holidays (
       id          SERIAL PRIMARY KEY,
@@ -230,7 +230,7 @@ export async function migratePatch2(): Promise<void> {
   `;
 
   // ── PATCH 011 — expense_reports (notes de frais) ─────────────────────
-  -- Frais remboursés = NON soumis aux charges sociales (règle fiscale CH)
+  // Frais remboursés = NON soumis aux charges sociales (règle fiscale CH)
   await sql`
     CREATE TABLE IF NOT EXISTS expense_reports (
       id              SERIAL PRIMARY KEY,
@@ -268,8 +268,8 @@ export async function migratePatch2(): Promise<void> {
   `;
 
   // ── PATCH 012 — withholding_tax_codes ─────────────────────────────────
-  -- Impôt à la source — permis B, G, L (étrangers non résidents)
-  -- Barèmes cantonaux: A (célibataire), B (marié), C (marié 2 revenus), etc.
+  // Impôt à la source — permis B, G, L (étrangers non résidents)
+  // Barèmes cantonaux: A (célibataire), B (marié), C (marié 2 revenus), etc.
   await sql`
     CREATE TABLE IF NOT EXISTS withholding_tax_rates (
       id          SERIAL PRIMARY KEY,
@@ -284,7 +284,7 @@ export async function migratePatch2(): Promise<void> {
     )
   `;
 
-  -- Table des tranches IS par canton (structure complète Swissdec)
+  // Table des tranches IS par canton (structure complète Swissdec)
   await sql`
     CREATE TABLE IF NOT EXISTS withholding_tax_brackets (
       id              SERIAL PRIMARY KEY,
@@ -301,7 +301,7 @@ export async function migratePatch2(): Promise<void> {
 
   await sql`CREATE INDEX IF NOT EXISTS idx_wht_lookup ON withholding_tax_brackets(canton, code, year, income_from)`;
 
-  -- Suivi IS mensuel par employé
+  // Suivi IS mensuel par employé
   await sql`
     CREATE TABLE IF NOT EXISTS withholding_tax_declarations (
       id              SERIAL PRIMARY KEY,
@@ -322,9 +322,9 @@ export async function migratePatch2(): Promise<void> {
     )
   `;
 
-  -- ── PATCH 013 — salary_certificates (Lohnausweis) ────────────────────
-  -- Certificat de salaire annuel — document légal Swissdec
-  -- 15 cases officielles (AFC / ESTV)
+  // ── PATCH 013 — salary_certificates (Lohnausweis) ────────────────────
+  // Certificat de salaire annuel — document légal Swissdec
+  // 15 cases officielles (AFC / ESTV)
   await sql`
     CREATE TABLE IF NOT EXISTS salary_certificates (
       id                  SERIAL PRIMARY KEY,
@@ -394,7 +394,7 @@ export async function migratePatch2(): Promise<void> {
     )
   `;
 
-  -- ── PATCH 014 — employee_documents ────────────────────────────────────
+  // ── PATCH 014 — employee_documents ────────────────────────────────────
   await sql`
     CREATE TABLE IF NOT EXISTS employee_documents (
       id              SERIAL PRIMARY KEY,
@@ -425,7 +425,7 @@ export async function migratePatch2(): Promise<void> {
 
   await sql`CREATE INDEX IF NOT EXISTS idx_docs_emp ON employee_documents(employee_id)`;
 
-  -- ── PATCH 015 — rht_periods (Réduction horaire / chômage partiel) ─────
+  // ── PATCH 015 — rht_periods (Réduction horaire / chômage partiel) ─────
   await sql`
     CREATE TABLE IF NOT EXISTS rht_periods (
       id              SERIAL PRIMARY KEY,
@@ -459,7 +459,7 @@ export async function migratePatch2(): Promise<void> {
     )
   `;
 
-  -- ── Additional indexes ─────────────────────────────────────────────────
+  // ── Additional indexes ─────────────────────────────────────────────────
   await sql`CREATE INDEX IF NOT EXISTS idx_absences_type    ON absence_requests(company_id, absence_type, start_date)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_wht_decl_emp     ON withholding_tax_declarations(employee_id, period_year)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_sal_cert_emp     ON salary_certificates(employee_id, year)`;
