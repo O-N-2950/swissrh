@@ -238,3 +238,201 @@ exportRouter.get('/avs.csv', requireManager, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+/**
+ * GET /api/exports/accounting.csv?year=YYYY&month=MM
+ * Export écritures comptables format Banana Comptabilité
+ * Schéma : Date | Pièce | Compte D | Compte C | Description | Montant CHF
+ *
+ * Plan comptable Banana standard PME suisse :
+ *   5000 Salaires bruts
+ *   5100 Cotisations AVS/AI/APG (part employé)
+ *   5110 Cotisations AC (part employé)
+ *   5120 LPP part employé
+ *   5130 LAA NP part employé
+ *   5140 IJM part employé
+ *   5200 Charges AVS/AI/APG employeur
+ *   5210 Charges AC employeur
+ *   5220 Charges LPP employeur
+ *   5230 Charges LAA P employeur
+ *   5240 Charges IJM employeur
+ *   5250 Allocations familiales
+ *   2000 Salaires à payer (transitoire)
+ *   2100 Charges sociales à payer (transitoire)
+ */
+exportRouter.get('/accounting.csv', requireManager, async (req, res) => {
+  const user = (req as any).user as JwtPayload;
+  const sql  = getSQL();
+  const year  = Number(req.query.year  || new Date().getFullYear());
+  const month = Number(req.query.month || new Date().getMonth() + 1);
+
+  try {
+    const [co] = await sql`SELECT name FROM companies WHERE id = ${user.companyId}`;
+    const payslips = await sql`
+      SELECT p.*, e.first_name, e.last_name
+      FROM payslips p JOIN employees e ON p.employee_id = e.id
+      WHERE p.company_id = ${user.companyId}
+        AND p.period_year = ${year} AND p.period_month = ${month}
+      ORDER BY e.last_name, e.first_name
+    `;
+
+    if (payslips.length === 0)
+      return res.status(404).json({ error: 'Aucun bulletin pour cette période' });
+
+    const period = `${year}-${String(month).padStart(2,'0')}`;
+    const lastDay = new Date(year, month, 0).toISOString().slice(0,10);
+
+    // Totaux agrégés
+    const sum = (field: string) => payslips.reduce((s: number, p: any) => s + Number(p[field]||0), 0);
+    const grossTotal  = sum('gross_salary');
+    const netTotal    = sum('net_salary');
+    const avsEe       = sum('avs_employee') + sum('ai_employee') + sum('apg_employee');
+    const acEe        = sum('ac_employee');
+    const lppEe       = sum('lpp_employee');
+    const laaNpEe     = sum('laa_np_employee');
+    const ijmEe       = sum('ijm_employee');
+    const totalDed    = sum('total_deductions');
+    const avsEr       = sum('avs_employer') + sum('ai_employer') + sum('apg_employer');
+    const acEr        = sum('ac_employer');
+    const lppEr       = sum('lpp_employer');
+    const laaP        = sum('laa_p_employer');
+    const ijmEr       = sum('ijm_employer');
+    const famAlloc    = sum('fam_alloc_employer');
+    const totalEr     = sum('total_employer');
+    const fmt2        = (n: number) => n.toFixed(2);
+
+    // Format Banana : Date;Pièce;CompteD;CompteC;Description;Montant
+    const rows: string[][] = [];
+    const piece = `SAL-${period}`;
+
+    // 1. Salaires bruts → débit 5000, crédit 2000
+    rows.push([lastDay, piece, '5000', '2000', `Salaires bruts ${period} (${payslips.length} emp.)`, fmt2(grossTotal)]);
+
+    // 2. Déductions employé → débit 2000, crédit 2100
+    if (avsEe > 0)   rows.push([lastDay, piece, '2000', '2100', `AVS/AI/APG part employé ${period}`,  fmt2(avsEe)]);
+    if (acEe  > 0)   rows.push([lastDay, piece, '2000', '2100', `AC part employé ${period}`,           fmt2(acEe)]);
+    if (lppEe > 0)   rows.push([lastDay, piece, '2000', '2100', `LPP part employé ${period}`,          fmt2(lppEe)]);
+    if (laaNpEe > 0) rows.push([lastDay, piece, '2000', '2100', `LAA NP part employé ${period}`,       fmt2(laaNpEe)]);
+    if (ijmEe > 0)   rows.push([lastDay, piece, '2000', '2100', `IJM part employé ${period}`,          fmt2(ijmEe)]);
+
+    // 3. Net à verser → débit 2000, crédit 1020 (CCP/Banque)
+    rows.push([lastDay, piece, '2000', '1020', `Salaires nets à verser ${period}`, fmt2(netTotal)]);
+
+    // 4. Charges patronales → débit 5200-5250, crédit 2100
+    if (avsEr  > 0)  rows.push([lastDay, piece, '5200', '2100', `AVS/AI/APG part employeur ${period}`,  fmt2(avsEr)]);
+    if (acEr   > 0)  rows.push([lastDay, piece, '5210', '2100', `AC part employeur ${period}`,           fmt2(acEr)]);
+    if (lppEr  > 0)  rows.push([lastDay, piece, '5220', '2100', `LPP part employeur ${period}`,          fmt2(lppEr)]);
+    if (laaP   > 0)  rows.push([lastDay, piece, '5230', '2100', `LAA P part employeur ${period}`,        fmt2(laaP)]);
+    if (ijmEr  > 0)  rows.push([lastDay, piece, '5240', '2100', `IJM part employeur ${period}`,          fmt2(ijmEr)]);
+    if (famAlloc > 0)rows.push([lastDay, piece, '5250', '2100', `Allocations familiales ${period}`,      fmt2(famAlloc)]);
+
+    // Ligne récap charges totales
+    rows.push([lastDay, piece, '5000', '5000',
+      `=== TOTAL CHARGES PATRONALES ${period} ===`, fmt2(totalEr)]);
+
+    // Détail par employé (pour ventilation)
+    rows.push(['', '', '', '', `--- Détail par employé ${period} ---`, '']);
+    for (const p of payslips) {
+      const name = `${p.last_name} ${p.first_name}`;
+      rows.push([lastDay, piece, '5000', '2000', `Salaire ${name}`, Number(p.gross_salary).toFixed(2)]);
+    }
+
+    const headers = ['Date', 'Pièce', 'Cpte Débit', 'Cpte Crédit', 'Description', 'Montant CHF'];
+    const csv = csvWithWatermark(rows, headers, {
+      companyName: co?.name || 'SwissRH',
+      generatedBy: user.email,
+      generatedAt: new Date().toISOString(),
+      exportType:  `Écritures comptables Banana ${period}`,
+    });
+
+    audit({ userId: user.userId, userEmail: user.email, userRole: user.role,
+      companyId: user.companyId, action: 'EXPORT_ACCOUNTING_BANANA',
+      resourceType: 'accounting', details: `Banana ${period}`, ipAddress: getIp(req) });
+
+    secureExportHeaders(res, `swissrh-banana-${period}.csv`, 'csv');
+    res.send('\uFEFF' + csv);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+/**
+ * GET /api/exports/accounting-abacus.csv?year=YYYY&month=MM
+ * Export écritures format Abacus (AbaConnect CSV)
+ * Colonnes: Periode;Konto;GKto;Belegnummer;BuchText;Betrag;MwSt
+ */
+exportRouter.get('/accounting-abacus.csv', requireManager, async (req, res) => {
+  const user = (req as any).user as JwtPayload;
+  const sql  = getSQL();
+  const year  = Number(req.query.year  || new Date().getFullYear());
+  const month = Number(req.query.month || new Date().getMonth() + 1);
+
+  try {
+    const [co] = await sql`SELECT name FROM companies WHERE id = ${user.companyId}`;
+    const payslips = await sql`
+      SELECT p.*, e.first_name, e.last_name
+      FROM payslips p JOIN employees e ON p.employee_id = e.id
+      WHERE p.company_id = ${user.companyId}
+        AND p.period_year = ${year} AND p.period_month = ${month}
+      ORDER BY e.last_name
+    `;
+
+    if (payslips.length === 0)
+      return res.status(404).json({ error: 'Aucun bulletin pour cette période' });
+
+    const period  = `${year}-${String(month).padStart(2,'0')}`;
+    const abaPer  = `${String(month).padStart(2,'0')}.${year}`; // Abacus: MM.YYYY
+    const lastDay = new Date(year, month, 0).toISOString().slice(0,10).replace(/-/g,'.');
+    const belegnr = `SAL${period.replace('-','')}`;
+    const fmt2    = (n: number) => n.toFixed(2).replace('.',',');
+    const sum     = (f: string) => payslips.reduce((s: number, p: any) => s + Number(p[f]||0), 0);
+
+    const rows: string[][] = [];
+    // Abacus columns: Periode | Konto | GKto | Belegnummer | BuchText | Betrag | MwSt%
+    const abr = (kto: string, gkto: string, txt: string, amt: number) =>
+      [abaPer, kto, gkto, belegnr, txt, fmt2(amt), '0'];
+
+    const gross  = sum('gross_salary');
+    const net    = sum('net_salary');
+    const avsEe  = sum('avs_employee') + sum('ai_employee') + sum('apg_employee');
+    const acEe   = sum('ac_employee');
+    const lppEe  = sum('lpp_employee');
+    const laaEe  = sum('laa_np_employee');
+    const ijmEe  = sum('ijm_employee');
+    const avsEr  = sum('avs_employer') + sum('ai_employer') + sum('apg_employer');
+    const acEr   = sum('ac_employer');
+    const lppEr  = sum('lpp_employer');
+    const laaEr  = sum('laa_p_employer');
+    const ijmEr  = sum('ijm_employer');
+    const fam    = sum('fam_alloc_employer');
+
+    rows.push(abr('5000','1020', `Salaires bruts ${period}`,   gross));
+    if (avsEe > 0) rows.push(abr('5100','2030', `AVS/AI/APG EE ${period}`,   avsEe));
+    if (acEe  > 0) rows.push(abr('5110','2030', `AC EE ${period}`,            acEe));
+    if (lppEe > 0) rows.push(abr('5120','2030', `LPP EE ${period}`,           lppEe));
+    if (laaEe > 0) rows.push(abr('5130','2030', `LAA NP EE ${period}`,        laaEe));
+    if (ijmEe > 0) rows.push(abr('5140','2030', `IJM EE ${period}`,           ijmEe));
+    rows.push(abr('1020','2000', `Net versé employés ${period}`,               net));
+    if (avsEr > 0) rows.push(abr('5200','2030', `AVS/AI/APG ER ${period}`,    avsEr));
+    if (acEr  > 0) rows.push(abr('5210','2030', `AC ER ${period}`,            acEr));
+    if (lppEr > 0) rows.push(abr('5220','2030', `LPP ER ${period}`,           lppEr));
+    if (laaEr > 0) rows.push(abr('5230','2030', `LAA P ER ${period}`,         laaEr));
+    if (ijmEr > 0) rows.push(abr('5240','2030', `IJM ER ${period}`,           ijmEr));
+    if (fam   > 0) rows.push(abr('5250','2030', `All. familiales ER ${period}`,fam));
+
+    const headers = ['Periode','Konto','GKto','Belegnummer','BuchText','Betrag','MwSt%'];
+    const csv = [
+      `# Abacus AbaConnect Import — ${co?.name}`,
+      `# Periode: ${abaPer} | Bulletins: ${payslips.length}`,
+      `# ${new Date().toISOString()}`,
+      '',
+      headers.join(';'),
+      ...rows.map(r => r.map(v => `"${v}"`).join(';')),
+    ].join('\n');
+
+    audit({ userId: user.userId, userEmail: user.email, userRole: user.role,
+      companyId: user.companyId, action: 'EXPORT_ACCOUNTING_ABACUS',
+      resourceType: 'accounting', details: `Abacus ${period}`, ipAddress: getIp(req) });
+
+    secureExportHeaders(res, `swissrh-abacus-${period}.csv`, 'csv');
+    res.send('\uFEFF' + csv);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
