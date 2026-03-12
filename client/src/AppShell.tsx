@@ -408,6 +408,7 @@ const NAV = [
   { id:"terminations", em:"⚖️", lb:"Licenciements" },
   { id:"documents", em:"📄", lb:"Documents"      },
   { id:"settings",  em:"⚙", lb:"Paramètres"     },
+  { id:"tenants",   em:"🏢", lb:"Fiduciaires"    },
 ];
 
 function Sidebar({ page, setPage, open, setOpen, user, onLogout }) {
@@ -2746,6 +2747,7 @@ function Reports() {
   const w = useW();
   const p = w < 600 ? '14px 12px' : '18px 26px';
   const [year, setYear] = useState(YEAR);
+  const [showLohnausweis, setShowLohnausweis] = useState(false);
   const { data: avsD, loading } = useApi(() => apiFetch(`/reports/avs?year=${year}`), [year]);
   const rows = avsD?.declarations || [];
 
@@ -2757,7 +2759,8 @@ function Reports() {
         <div className="g3">
           {[
             { icon:'🏦', title:'Déclaration AVS', desc:`Masse salariale ${year} — export CSV`, action: () => window.open(`/api/exports/avs.csv?year=${year}`, '_blank'), color:'var(--blue)' },
-            { icon:'📋', title:'Lohnausweis', desc:'Certificat de salaire 15 cases', action: () => alert('PDF Lohnausweis — bientôt disponible'), color:'var(--purple)' },
+            { icon:'📋', title:'Lohnausweis', desc:'Certificat de salaire 15 cases (Swissdec)', action: () => setShowLohnausweis(true), color:'var(--purple)' },
+            { icon:'📑', title:'Export ELM XML', desc:`Déclaration AVS/AC/LAA — Swissdec ELM 4.0`, action: () => window.open(\`/api/exports/elm.xml?year=\${year}\`, '_blank'), color:'var(--amber)' },
             { icon:'👥', title:'Export employés', desc:'Liste complète — données RH', action: () => window.open('/api/exports/employees.csv', '_blank'), color:'var(--green)' },
           ].map((r, i) => (
             <div key={i} className="card" style={{ padding:20, cursor:'pointer', transition:'box-shadow .2s' }}
@@ -2797,6 +2800,7 @@ function Reports() {
         </div>
       </div>
     </div>
+    {showLohnausweis && <LohnausweisModal year={year} onClose={() => setShowLohnausweis(false)}/>}
   );
 }
 
@@ -4107,6 +4111,225 @@ export default function AppShell() {
     );
   }
 
+
+/* ══════════════════════════════════════════════════════════
+   MODAL: Lohnausweis batch download
+══════════════════════════════════════════════════════════ */
+function LohnausweisModal({ year, onClose }: { year: number; onClose: () => void }) {
+  const { data, loading } = useApi(() => apiFetch(`/salary/lohnausweis/batch/${year}`), [year]);
+  const employees = data?.employees || [];
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ padding:28, maxWidth:520 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontWeight:800, fontSize:17 }}>📋 Lohnausweis {year}</div>
+            <div style={{ fontSize:12, color:'var(--tm)' }}>Certificat de salaire officiel — 15 cases Swissdec</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--tm)' }}>×</button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding:32, textAlign:'center' }}><Spinner size={24}/></div>
+        ) : employees.length === 0 ? (
+          <div style={{ padding:32, textAlign:'center', color:'var(--tm)', fontSize:13 }}>
+            Aucun bulletin trouvé pour {year}
+          </div>
+        ) : (
+          <>
+            <div style={{ background:'var(--blued)', borderRadius:8, padding:'10px 14px', fontSize:12, color:'var(--blue)', marginBottom:16 }}>
+              ℹ {employees.length} employé(s) avec bulletin(s) en {year}. Téléchargez individuellement ou tous en ZIP.
+            </div>
+            <div className="card stg" style={{ marginBottom:16, maxHeight:320, overflowY:'auto' }}>
+              {employees.map((emp: any) => (
+                <div key={emp.id} className="row" style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px' }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, fontSize:13 }}>{emp.first_name} {emp.last_name}</div>
+                    <div style={{ fontSize:10, color:'var(--tm)' }}>{emp.month_count} mois</div>
+                  </div>
+                  <button className="btn btn-p" style={{ fontSize:11 }}
+                    onClick={() => window.open(`/api/salary/lohnausweis/${emp.id}/${year}/pdf`, '_blank')}>
+                    📥 PDF
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div style={{ display:'flex', justifyContent:'flex-end' }}>
+          <button className="btn btn-g" onClick={onClose}>Fermer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: FIDUCIAIRES (multi-mandants)
+══════════════════════════════════════════════════════════ */
+function Tenants() {
+  const w = useW();
+  const p = w < 600 ? '14px 12px' : '18px 26px';
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ name:'', email:'', phone:'', city:'' });
+  const [saving, setSaving] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<any>(null);
+
+  const { data, loading, reload } = useApi(() => apiFetch('/tenants'));
+  const { data: companiesD, loading: cLoad } = useApi(
+    () => selectedTenant ? apiFetch(`/tenants/${selectedTenant.id}/companies`) : null,
+    [selectedTenant?.id]
+  );
+  const tenants   = data?.tenants || [];
+  const companies = companiesD?.companies || [];
+
+  const createTenant = async () => {
+    setSaving(true);
+    try {
+      await apiFetch('/tenants', 'POST', form);
+      setShowNew(false);
+      setForm({ name:'', email:'', phone:'', city:'' });
+      reload();
+    } catch(e: any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const switchToCompany = async (tenantId: number, companyId: number, companyName: string) => {
+    try {
+      const r = await apiFetch(`/tenants/${tenantId}/switch/${companyId}`, 'POST');
+      if (r.ok) {
+        // Reload page with new context
+        window.location.reload();
+      }
+    } catch(e: any) { alert(e.message); }
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
+      <Topbar title="Fiduciaires & Mandats" sub="Multi-mandants · Switcher client · Gestion portefeuille"
+        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowNew(true)}>+ Nouveau mandat</button>}/>
+      <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Info banner fiduciaire actif */}
+        {(window as any).__isFiduciaire && (
+          <div style={{ background:'var(--amberd)', border:'1px solid var(--amber)', borderRadius:8, padding:'10px 16px', display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ fontSize:20 }}>🏢</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:13, color:'var(--amber)' }}>Mode fiduciaire actif</div>
+              <div style={{ fontSize:11, color:'var(--tm)' }}>Vous opérez dans le contexte d'une entreprise cliente.</div>
+            </div>
+            <button className="btn btn-g" style={{ fontSize:11 }}
+              onClick={async () => { await apiFetch('/tenants/exit', 'POST'); window.location.reload(); }}>
+              ← Retour
+            </button>
+          </div>
+        )}
+
+        <div className="g2">
+          {/* Liste mandats */}
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ fontWeight:700, fontSize:14, padding:'0 2px' }}>📂 Mes mandats</div>
+            {loading ? <div style={{ padding:20, textAlign:'center' }}><Spinner size={20}/></div>
+            : tenants.length === 0 ? (
+              <div className="card" style={{ padding:32, textAlign:'center' }}>
+                <div style={{ fontSize:36, marginBottom:12 }}>🏢</div>
+                <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>Aucun mandat</div>
+                <div style={{ fontSize:12, color:'var(--tm)', marginBottom:16 }}>Créez votre premier mandat pour gérer des entreprises clientes</div>
+                <button className="btn btn-p" onClick={() => setShowNew(true)}>+ Créer un mandat</button>
+              </div>
+            ) : tenants.map((t: any) => (
+              <div key={t.id} className={`card row`} style={{
+                padding:'14px 18px', cursor:'pointer',
+                border: selectedTenant?.id === t.id ? '2px solid var(--blue)' : '2px solid transparent',
+                background: selectedTenant?.id === t.id ? 'var(--blued)' : undefined,
+              }} onClick={() => setSelectedTenant(t)}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:'var(--blue)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'white', fontWeight:800, flexShrink:0 }}>
+                    {t.name[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:800, fontSize:14 }}>{t.name}</div>
+                    <div style={{ fontSize:11, color:'var(--tm)' }}>
+                      {t.company_count} entreprise{t.company_count !== 1 ? 's' : ''}
+                      {t.city ? ` · ${t.city}` : ''}
+                    </div>
+                  </div>
+                  <span className="badge s-approved" style={{ fontSize:10 }}>
+                    {t.plan || 'fiduciaire'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Entreprises du mandat sélectionné */}
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ fontWeight:700, fontSize:14, padding:'0 2px' }}>
+              {selectedTenant ? `🏭 Entreprises — ${selectedTenant.name}` : '🏭 Entreprises'}
+            </div>
+            {!selectedTenant ? (
+              <div className="card" style={{ padding:24, textAlign:'center', color:'var(--tm)', fontSize:12 }}>
+                Sélectionnez un mandat pour voir ses entreprises
+              </div>
+            ) : cLoad ? <div style={{ padding:20, textAlign:'center' }}><Spinner size={20}/></div>
+            : companies.length === 0 ? (
+              <div className="card" style={{ padding:24, textAlign:'center', color:'var(--tm)', fontSize:12 }}>
+                Aucune entreprise dans ce mandat.<br/>
+                <span style={{ fontSize:10 }}>Rattachez des entreprises depuis leurs paramètres.</span>
+              </div>
+            ) : companies.map((co: any) => (
+              <div key={co.id} className="card row" style={{ padding:'12px 16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:34, height:34, borderRadius:8, background:'var(--surf2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>🏭</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:13 }}>{co.name} {co.legal_form||''}</div>
+                    <div style={{ fontSize:11, color:'var(--tm)' }}>
+                      {co.canton} · {co.employee_count} employé{co.employee_count !== 1 ? 's' : ''}
+                      {co.last_payroll_year ? ` · Dernière paie: ${co.last_payroll_year}/${co.last_payroll_month}` : ''}
+                    </div>
+                  </div>
+                  <button className="btn btn-p" style={{ fontSize:11, flexShrink:0 }}
+                    onClick={() => switchToCompany(selectedTenant.id, co.id, co.name)}>
+                    🔀 Switcher →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Modal nouveau mandat */}
+      {showNew && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
+          <div className="modal" style={{ padding:24 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+              <div style={{ fontWeight:800, fontSize:16 }}>🏢 Nouveau mandat fiduciaire</div>
+              <button onClick={() => setShowNew(false)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20 }}>×</button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              {[['Nom fiduciaire *', 'name', 'text'], ['Email', 'email', 'email'], ['Téléphone', 'phone', 'text'], ['Ville', 'city', 'text']].map(([lbl, k, type]) => (
+                <div key={k}>
+                  <label style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:'var(--tm)', display:'block', marginBottom:4 }}>{lbl}</label>
+                  <input className="inp" type={type} value={(form as any)[k]} onChange={e => setForm(f => ({...f, [k]: e.target.value}))}/>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:20 }}>
+              <button className="btn btn-g" onClick={() => setShowNew(false)}>Annuler</button>
+              <button className="btn btn-p" onClick={createTenant} disabled={saving || !form.name}>
+                {saving ? <Spinner size={14}/> : '✅ Créer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
   const PAGES = {
     dashboard: <Dashboard user={user}/>,
     employees: <Employees/>,
@@ -4118,6 +4341,7 @@ export default function AppShell() {
     reports:   <Reports/>,
     settings:  <Settings/>,
     terminations: <Terminations/>,
+    tenants:       <Tenants/>,
     portal_preview: <div style={{flex:1,overflowY:'auto',background:'var(--bg)'}}>
       <div style={{padding:'10px 20px',background:'rgba(49,118,166,.07)',borderBottom:'1px solid var(--b1)',fontSize:11,color:'var(--blue)',fontWeight:700}}>
         👁 Prévisualisation — Portail Employé
