@@ -55,6 +55,7 @@ export interface SectorContribRates {
     emp_rate?: number;
     base: 'gross' | 'capped';
     ceiling_monthly?: number;
+    notes?: string;
   };
 
   // Fonds / caisse sectorielle LPP (remplace ou complète LPP standard)
@@ -72,6 +73,7 @@ export interface SectorContribRates {
     emp_rate: number; // souvent partagé 50/50
     ceiling_monthly?: number;
     optional?: boolean;
+    notes?: string;
   };
 
   // Fonds garantie / sécurité industrie
