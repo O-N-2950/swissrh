@@ -409,6 +409,9 @@ const NAV = [
   { id:"documents", em:"📄", lb:"Documents"      },
   { id:"settings",  em:"⚙", lb:"Paramètres"     },
   { id:"tenants",   em:"🏢", lb:"Fiduciaires"    },
+  { id:"shifts",    em:"📅", lb:"Planning"       },
+  { id:"expenses",  em:"🧾", lb:"Frais"           },
+  { id:"ai",        em:"🤖", lb:"IA Anomalies"    },
 ];
 
 function Sidebar({ page, setPage, open, setOpen, user, onLogout }) {
@@ -2762,6 +2765,8 @@ function Reports() {
             { icon:'📋', title:'Lohnausweis', desc:'Certificat de salaire 15 cases (Swissdec)', action: () => setShowLohnausweis(true), color:'var(--purple)' },
             { icon:'📑', title:'Export ELM XML', desc:`Déclaration AVS/AC/LAA — Swissdec ELM 4.0`, action: () => window.open(`/api/exports/elm.xml?year=${year}`, '_blank'), color:'var(--amber)' },
             { icon:'👥', title:'Export employés', desc:'Liste complète — données RH', action: () => window.open('/api/exports/employees.csv', '_blank'), color:'var(--green)' },
+            { icon:'📒', title:'Écritures Banana', desc:`Comptabilité suisse — plan PME`, action: () => window.open(`/api/exports/accounting.csv?year=${year}&month=${MONTH}`, '_blank'), color:'var(--teal,#0d9488)' },
+            { icon:'📗', title:'Export Abacus', desc:`AbaConnect — import direct`, action: () => window.open(`/api/exports/accounting-abacus.csv?year=${year}&month=${MONTH}`, '_blank'), color:'var(--emerald,#059669)' },
           ].map((r, i) => (
             <div key={i} className="card" style={{ padding:20, cursor:'pointer', transition:'box-shadow .2s' }}
               onClick={r.action}
@@ -4330,6 +4335,619 @@ function Tenants() {
   );
 }
 
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: PLANNING SHIFTS
+══════════════════════════════════════════════════════════ */
+const DAYS_FR = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const SHIFT_COLORS: Record<string, string> = {
+  scheduled: '#1a56db', confirmed: '#10b981', absent: '#ef4444', swapped: '#f59e0b'
+};
+
+function ShiftsPlanning() {
+  const w = useW();
+  const [weekDate, setWeekDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - (d.getDay()||7) + 1); return d;
+  });
+  const [showAdd, setShowAdd]   = useState(false);
+  const [form, setForm]         = useState({ employee_id:'', shift_date:'', start_time:'08:00', end_time:'17:00', break_minutes:30, role_label:'' });
+  const [saving, setSaving]     = useState(false);
+
+  const monday = weekDate.toISOString().slice(0,10);
+  const { data, loading, reload } = useApi(
+    () => apiFetch(`/shifts/week?date=${monday}`), [monday]
+  );
+  const employees: any[] = data?.employees || [];
+  const shifts: any[]    = data?.shifts    || [];
+
+  const prevWeek = () => { const d = new Date(weekDate); d.setDate(d.getDate()-7); setWeekDate(d); };
+  const nextWeek = () => { const d = new Date(weekDate); d.setDate(d.getDate()+7); setWeekDate(d); };
+
+  const weekDays = Array.from({length:7}, (_,i) => {
+    const d = new Date(weekDate); d.setDate(d.getDate()+i);
+    return d.toISOString().slice(0,10);
+  });
+
+  const getShifts = (empId: number, date: string) =>
+    shifts.filter((s: any) => s.employee_id === empId && s.shift_date?.slice(0,10) === date);
+
+  const addShift = async () => {
+    if (!form.employee_id || !form.shift_date) return;
+    setSaving(true);
+    try {
+      await apiFetch('/shifts', 'POST', form);
+      setShowAdd(false);
+      reload();
+    } catch(e: any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const deleteShift = async (id: number) => {
+    if (!confirm('Supprimer ce shift?')) return;
+    await apiFetch(`/shifts/${id}`, 'DELETE');
+    reload();
+  };
+
+  return (
+    <div style={{flex:1, overflowY:'auto', paddingBottom: w<768?68:0}}>
+      <Topbar title="Planning Shifts" sub="Vue semaine · Par employé · Glisser-déposer"
+        actions={<button className="btn btn-p" style={{fontSize:11}} onClick={()=>setShowAdd(true)}>+ Ajouter shift</button>}/>
+      <div style={{padding:'14px 18px'}}>
+
+        {/* Navigation semaine */}
+        <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16}}>
+          <button className="btn btn-g" style={{fontSize:13}} onClick={prevWeek}>‹</button>
+          <div style={{fontWeight:800, fontSize:15, flex:1, textAlign:'center'}}>
+            Semaine du {new Date(weekDate).toLocaleDateString('fr-CH', {day:'2-digit',month:'long',year:'numeric'})}
+          </div>
+          <button className="btn btn-g" style={{fontSize:13}} onClick={nextWeek}>›</button>
+        </div>
+
+        {loading ? <div style={{padding:40,textAlign:'center'}}><Spinner size={28}/></div>
+        : <div style={{overflowX:'auto'}}>
+          <table style={{borderCollapse:'collapse', minWidth: w<768?700:0, width:'100%', fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{padding:'8px 12px', textAlign:'left', borderBottom:'2px solid var(--b1)', minWidth:120, background:'var(--surf2)', position:'sticky', left:0, zIndex:2}}>
+                  Employé
+                </th>
+                {weekDays.map((d,i) => {
+                  const isToday = d === new Date().toISOString().slice(0,10);
+                  return (
+                    <th key={d} style={{padding:'8px 8px', textAlign:'center', borderBottom:'2px solid var(--b1)',
+                      minWidth:100, background: isToday ? 'var(--blued)' : 'var(--surf2)',
+                      color: isToday ? 'var(--blue)' : 'var(--t1)', borderRadius: isToday ? '6px 6px 0 0' : 0}}>
+                      <div>{DAYS_FR[i]}</div>
+                      <div style={{fontSize:10, fontWeight:400, color:'var(--tm)'}}>{d.slice(5)}</div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length === 0 ? (
+                <tr><td colSpan={8} style={{padding:32, textAlign:'center', color:'var(--tm)'}}>
+                  Aucun employé actif
+                </td></tr>
+              ) : employees.map((emp: any) => (
+                <tr key={emp.id} style={{borderBottom:'1px solid var(--b1)'}}>
+                  <td style={{padding:'8px 12px', fontWeight:700, fontSize:12,
+                    background:'var(--surf)', position:'sticky', left:0, zIndex:1, borderRight:'2px solid var(--b1)'}}>
+                    {emp.first_name} {emp.last_name}
+                    {emp.department && <div style={{fontSize:9, color:'var(--tm)', fontWeight:400}}>{emp.department}</div>}
+                  </td>
+                  {weekDays.map(d => {
+                    const dayShifts = getShifts(emp.id, d);
+                    const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6;
+                    return (
+                      <td key={d} style={{padding:4, verticalAlign:'top', minWidth:100, minHeight:40,
+                        background: isWeekend ? 'var(--surf2)' : 'transparent'}}>
+                        {dayShifts.map((s: any) => (
+                          <div key={s.id} style={{
+                            background: SHIFT_COLORS[s.status] || 'var(--blue)',
+                            color:'white', borderRadius:5, padding:'3px 6px', marginBottom:2,
+                            fontSize:10, cursor:'pointer', position:'relative',
+                          }} title={`${s.start_time?.slice(0,5)}–${s.end_time?.slice(0,5)}${s.role_label?' · '+s.role_label:''}`}>
+                            <span>{s.start_time?.slice(0,5)}–{s.end_time?.slice(0,5)}</span>
+                            <button onClick={()=>deleteShift(s.id)} style={{
+                              position:'absolute', right:2, top:1, background:'none', border:'none',
+                              color:'rgba(255,255,255,.7)', cursor:'pointer', fontSize:10, lineHeight:1,
+                            }}>×</button>
+                          </div>
+                        ))}
+                        <button style={{
+                          width:'100%', border:'1px dashed var(--b1)', background:'none', borderRadius:4,
+                          cursor:'pointer', color:'var(--tm)', fontSize:9, padding:'2px 0',
+                          marginTop: dayShifts.length>0?2:0, display:'block',
+                        }} onClick={()=>{setForm(f=>({...f, employee_id:String(emp.id), shift_date:d})); setShowAdd(true);}}>
+                          +
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+
+        {/* Légende */}
+        <div style={{display:'flex', gap:12, marginTop:12, flexWrap:'wrap'}}>
+          {Object.entries(SHIFT_COLORS).map(([k,v]) => (
+            <div key={k} style={{display:'flex', alignItems:'center', gap:5, fontSize:11}}>
+              <div style={{width:12, height:12, borderRadius:3, background:v}}/>
+              <span style={{color:'var(--tm)'}}>{k}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal ajout */}
+      {showAdd && (
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+          <div className="modal" style={{padding:24, maxWidth:440}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}>
+              <div style={{fontWeight:800, fontSize:16}}>📅 Nouveau shift</div>
+              <button onClick={()=>setShowAdd(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20}}>×</button>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Employé *</label>
+                <select className="inp" value={form.employee_id} onChange={e=>setForm(f=>({...f,employee_id:e.target.value}))}>
+                  <option value="">— Choisir —</option>
+                  {employees.map((e:any)=><option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Date *</label>
+                <input className="inp" type="date" value={form.shift_date} onChange={e=>setForm(f=>({...f,shift_date:e.target.value}))}/>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                {[['Début','start_time','time'],['Fin','end_time','time']].map(([lbl,k,t])=>(
+                  <div key={k}>
+                    <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>{lbl}</label>
+                    <input className="inp" type={t} value={(form as any)[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}/>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Rôle / Poste</label>
+                <input className="inp" type="text" placeholder="Chef de rang, Caissier..." value={form.role_label} onChange={e=>setForm(f=>({...f,role_label:e.target.value}))}/>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:20}}>
+              <button className="btn btn-g" onClick={()=>setShowAdd(false)}>Annuler</button>
+              <button className="btn btn-p" onClick={addShift} disabled={saving||!form.employee_id||!form.shift_date}>
+                {saving?<Spinner size={14}/>:'✅ Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: NOTES DE FRAIS
+══════════════════════════════════════════════════════════ */
+const EXPENSE_CATS: Record<string, string> = {
+  travel:'✈️ Transport', meal:'🍽️ Repas', accommodation:'🏨 Hébergement',
+  parking:'🅿️ Parking', km:'🚗 Km (0.70/km)', other:'📦 Autre',
+};
+const STATUS_EXPENSE: Record<string, string> = {
+  draft:'Brouillon', submitted:'Soumis', approved:'Approuvé', rejected:'Refusé', paid:'Payé',
+};
+
+function ExpensesPage() {
+  const w = useW();
+  const [showNew, setShowNew]       = useState(false);
+  const [selected, setSelected]     = useState<any>(null);
+  const [addItem, setAddItem]       = useState(false);
+  const [formR, setFormR]           = useState({ title:'', period_year: YEAR, period_month: MONTH });
+  const [formI, setFormI]           = useState({ expense_date: new Date().toISOString().slice(0,10), category:'travel', description:'', amount:'', km_distance:'' });
+  const [saving, setSaving]         = useState(false);
+  const [detailItems, setDetailItems] = useState<any[]>([]);
+
+  const { data, loading, reload } = useApi(() => apiFetch('/expenses'));
+  const reports: any[] = data?.reports || [];
+
+  const loadDetail = async (r: any) => {
+    const d = await apiFetch(`/expenses/${r.id}`);
+    setSelected(d.report);
+    setDetailItems(d.items || []);
+  };
+
+  const createReport = async () => {
+    setSaving(true);
+    try {
+      const r = await apiFetch('/expenses', 'POST', { ...formR, employee_id: null });
+      setFormR({ title:'', period_year:YEAR, period_month:MONTH });
+      setShowNew(false);
+      reload();
+      loadDetail(r.report);
+    } catch(e:any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const addExpenseItem = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/expenses/${selected.id}/items`, 'POST', formI);
+      const d = await apiFetch(`/expenses/${selected.id}`);
+      setSelected(d.report); setDetailItems(d.items||[]);
+      setAddItem(false);
+      setFormI({ expense_date: new Date().toISOString().slice(0,10), category:'travel', description:'', amount:'', km_distance:'' });
+      reload();
+    } catch(e:any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const removeItem = async (itemId: number) => {
+    if (!selected) return;
+    await apiFetch(`/expenses/${selected.id}/items/${itemId}`, 'DELETE');
+    const d = await apiFetch(`/expenses/${selected.id}`);
+    setSelected(d.report); setDetailItems(d.items||[]);
+    reload();
+  };
+
+  const submitReport = async () => {
+    if (!selected) return;
+    await apiFetch(`/expenses/${selected.id}/submit`, 'PUT');
+    const d = await apiFetch(`/expenses/${selected.id}`);
+    setSelected(d.report); reload();
+  };
+
+  const approveReport = async (approve: boolean) => {
+    if (!selected) return;
+    await apiFetch(`/expenses/${selected.id}/${approve?'approve':'reject'}`, 'PUT');
+    const d = await apiFetch(`/expenses/${selected.id}`);
+    setSelected(d.report); reload();
+  };
+
+  const stBadge = (s: string) => {
+    const colors: Record<string, string> = { draft:'var(--tm)', submitted:'var(--amber)', approved:'var(--green)', rejected:'var(--red)', paid:'var(--blue)' };
+    return <span style={{fontSize:10, fontWeight:700, color: colors[s]||'var(--tm)', background:`${colors[s]||'var(--tm)'}20`, padding:'2px 7px', borderRadius:20}}>{STATUS_EXPENSE[s]||s}</span>;
+  };
+
+  return (
+    <div style={{flex:1, overflowY:'auto', paddingBottom: w<768?68:0}}>
+      <Topbar title="Notes de frais" sub="Soumission · Approbation · Export"
+        actions={<button className="btn btn-p" style={{fontSize:11}} onClick={()=>setShowNew(true)}>+ Nouveau rapport</button>}/>
+
+      <div style={{padding:'14px 18px', display:'flex', gap:16, flexDirection: w<900?'column':'row'}}>
+        {/* Liste rapports */}
+        <div style={{width: w<900?'100%':320, flexShrink:0}}>
+          {loading ? <div style={{padding:20,textAlign:'center'}}><Spinner size={20}/></div>
+          : reports.length === 0 ? (
+            <div className="card" style={{padding:32, textAlign:'center'}}>
+              <div style={{fontSize:36, marginBottom:12}}>🧾</div>
+              <div style={{fontWeight:700, marginBottom:8}}>Aucun rapport</div>
+              <button className="btn btn-p" onClick={()=>setShowNew(true)}>+ Créer</button>
+            </div>
+          ) : reports.map((r:any) => (
+            <div key={r.id} className="card row" style={{padding:'12px 16px', marginBottom:8, cursor:'pointer',
+              border: selected?.id===r.id ? '2px solid var(--blue)' : '2px solid transparent'}}
+              onClick={()=>loadDetail(r)}>
+              <div style={{fontWeight:700, fontSize:13, marginBottom:3}}>{r.title}</div>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                <span style={{fontSize:11, color:'var(--tm)'}}>{r.first_name} {r.last_name} · {r.period_year}/{String(r.period_month).padStart(2,'0')}</span>
+                {stBadge(r.status)}
+              </div>
+              <div style={{fontWeight:800, fontSize:14, marginTop:4, color:'var(--blue)'}}>
+                CHF {Number(r.total_amount||0).toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Détail rapport */}
+        <div style={{flex:1}}>
+          {!selected ? (
+            <div className="card" style={{padding:40, textAlign:'center', color:'var(--tm)', fontSize:13}}>
+              Sélectionnez un rapport pour voir le détail
+            </div>
+          ) : (
+            <div className="card" style={{padding:20}}>
+              <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:16}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:800, fontSize:16}}>{selected.title}</div>
+                  <div style={{fontSize:12, color:'var(--tm)'}}>{selected.first_name} {selected.last_name} · {selected.period_year}/{String(selected.period_month).padStart(2,'0')}</div>
+                </div>
+                {stBadge(selected.status)}
+              </div>
+
+              {/* Items */}
+              <div className="card stg" style={{marginBottom:14}}>
+                {detailItems.length === 0 ? (
+                  <div style={{padding:20, textAlign:'center', color:'var(--tm)', fontSize:12}}>Aucun item</div>
+                ) : detailItems.map((item:any) => (
+                  <div key={item.id} className="row" style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px'}}>
+                    <span style={{fontSize:18}}>{(EXPENSE_CATS[item.category]||'📦').split(' ')[0]}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700, fontSize:13}}>{item.description}</div>
+                      <div style={{fontSize:10, color:'var(--tm)'}}>{item.expense_date?.slice(0,10)} · {item.category}</div>
+                    </div>
+                    <div style={{fontWeight:800, fontSize:14}}>CHF {Number(item.amount).toFixed(2)}</div>
+                    {selected.status === 'draft' && (
+                      <button onClick={()=>removeItem(item.id)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--red)',fontSize:16}}>×</button>
+                    )}
+                  </div>
+                ))}
+                <div style={{padding:'10px 14px', borderTop:'1px solid var(--b1)', fontWeight:800, fontSize:14, display:'flex', justifyContent:'flex-end'}}>
+                  Total : CHF {Number(selected.total_amount||0).toFixed(2)}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+                {selected.status === 'draft' && <>
+                  <button className="btn btn-g" onClick={()=>setAddItem(true)}>+ Ajouter item</button>
+                  <button className="btn btn-p" onClick={submitReport} disabled={detailItems.length===0}>📤 Soumettre</button>
+                </>}
+                {selected.status === 'submitted' && <>
+                  <button className="btn btn-p" onClick={()=>approveReport(true)}>✅ Approuver</button>
+                  <button className="btn" style={{background:'var(--red)', color:'white', border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontSize:12}} onClick={()=>approveReport(false)}>❌ Refuser</button>
+                </>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal nouveau rapport */}
+      {showNew && (
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setShowNew(false)}>
+          <div className="modal" style={{padding:24}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}>
+              <div style={{fontWeight:800, fontSize:16}}>🧾 Nouveau rapport de frais</div>
+              <button onClick={()=>setShowNew(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20}}>×</button>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Titre *</label>
+                <input className="inp" type="text" placeholder="Déplacement Lyon, Repas client..." value={formR.title} onChange={e=>setFormR(f=>({...f,title:e.target.value}))}/>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <div>
+                  <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Année</label>
+                  <select className="inp" value={formR.period_year} onChange={e=>setFormR(f=>({...f,period_year:+e.target.value}))}>
+                    {[YEAR-1,YEAR,YEAR+1].map(y=><option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Mois</label>
+                  <select className="inp" value={formR.period_month} onChange={e=>setFormR(f=>({...f,period_month:+e.target.value}))}>
+                    {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:20}}>
+              <button className="btn btn-g" onClick={()=>setShowNew(false)}>Annuler</button>
+              <button className="btn btn-p" onClick={createReport} disabled={saving||!formR.title}>
+                {saving?<Spinner size={14}/>:'✅ Créer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ajout item */}
+      {addItem && (
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setAddItem(false)}>
+          <div className="modal" style={{padding:24}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:16}}>
+              <div style={{fontWeight:800, fontSize:16}}>+ Item de frais</div>
+              <button onClick={()=>setAddItem(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20}}>×</button>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              {[['Date *','expense_date','date'],['Description *','description','text']].map(([lbl,k,t])=>(
+                <div key={k}>
+                  <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>{lbl}</label>
+                  <input className="inp" type={t} value={(formI as any)[k]} onChange={e=>setFormI(f=>({...f,[k]:e.target.value}))}/>
+                </div>
+              ))}
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Catégorie</label>
+                <select className="inp" value={formI.category} onChange={e=>setFormI(f=>({...f,category:e.target.value}))}>
+                  {Object.entries(EXPENSE_CATS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              {formI.category === 'km' ? (
+                <div>
+                  <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Distance (km) → 0.70 CHF/km</label>
+                  <input className="inp" type="number" step="0.1" value={formI.km_distance} onChange={e=>setFormI(f=>({...f,km_distance:e.target.value}))}/>
+                </div>
+              ) : (
+                <div>
+                  <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Montant CHF</label>
+                  <input className="inp" type="number" step="0.05" value={formI.amount} onChange={e=>setFormI(f=>({...f,amount:e.target.value}))}/>
+                </div>
+              )}
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
+              <button className="btn btn-g" onClick={()=>setAddItem(false)}>Annuler</button>
+              <button className="btn btn-p" onClick={addExpenseItem} disabled={saving}>
+                {saving?<Spinner size={14}/>:'✅ Ajouter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: IA ANOMALIES SALAIRES
+══════════════════════════════════════════════════════════ */
+const SEVERITY_CONFIG = {
+  critical: { color:'#dc2626', bg:'#fef2f2', icon:'🔴', label:'Critique' },
+  warning:  { color:'#d97706', bg:'#fffbeb', icon:'🟡', label:'Attention' },
+  info:     { color:'#2563eb', bg:'#eff6ff', icon:'🔵', label:'Info' },
+};
+
+function AIAnomalies() {
+  const w = useW();
+  const [year,  setYear]  = useState(YEAR);
+  const [month, setMonth] = useState(MONTH);
+
+  const { data: anomData, loading: anomLoading, reload } = useApi(
+    () => apiFetch(`/ai/anomalies?year=${year}&month=${month}`), [year, month]
+  );
+  const { data: trendData, loading: trendLoading } = useApi(
+    () => apiFetch(`/ai/trends?year=${year}`), [year]
+  );
+  const { data: alertData } = useApi(() => apiFetch('/ai/alerts'), []);
+
+  const anomalies: any[] = anomData?.anomalies || [];
+  const summary          = anomData?.summary || { critical:0, warning:0, info:0 };
+  const monthly          = trendData?.monthly || [];
+  const projection       = trendData?.projection;
+  const alerts: any[]    = alertData?.alerts || [];
+
+  return (
+    <div style={{flex:1, overflowY:'auto', paddingBottom: w<768?68:0}}>
+      <Topbar title="IA — Détection d'anomalies" sub="Analyse heuristique · Tendances · Alertes"/>
+      <div style={{padding:'14px 18px', display:'flex', flexDirection:'column', gap:14}}>
+
+        {/* Filtres */}
+        <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}}>
+          <select className="inp" style={{width:80}} value={year} onChange={e=>setYear(+e.target.value)}>
+            {[YEAR-2,YEAR-1,YEAR,YEAR+1].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          <select className="inp" style={{width:100}} value={month} onChange={e=>setMonth(+e.target.value)}>
+            {MONTH_NAMES.map((n,i)=><option key={i+1} value={i+1}>{n}</option>)}
+          </select>
+          <button className="btn btn-p" style={{fontSize:11}} onClick={()=>reload()}>🔍 Analyser</button>
+          <span style={{fontSize:11, color:'var(--tm)'}}>{anomData?.analyzed||0} bulletins analysés</span>
+        </div>
+
+        {/* Alertes actives */}
+        {alerts.length > 0 && (
+          <div>
+            {alerts.map((a:any,i:number) => (
+              <div key={i} style={{background:'var(--amberd)', border:'1px solid var(--amber)', borderRadius:8, padding:'10px 16px', marginBottom:8, display:'flex', alignItems:'center', gap:12}}>
+                <span style={{fontSize:20}}>⚠️</span>
+                <div>
+                  <div style={{fontWeight:700, fontSize:13, color:'var(--amber)'}}>{a.message}</div>
+                  <div style={{fontSize:11, color:'var(--tm)'}}>{a.period} · {a.employees?.join(', ')}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* KPIs anomalies */}
+        <div className="g3">
+          {Object.entries(SEVERITY_CONFIG).map(([key, cfg]) => (
+            <div key={key} className="card" style={{padding:'16px 20px', borderLeft:`4px solid ${cfg.color}`}}>
+              <div style={{fontSize:11, color:'var(--tm)', marginBottom:4}}>{cfg.icon} {cfg.label}</div>
+              <div style={{fontSize:28, fontWeight:900, color:cfg.color}}>
+                {(summary as any)[key] || 0}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Liste anomalies */}
+        <div className="card">
+          <div style={{padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:14}}>
+            🔍 Anomalies détectées — {MONTH_NAMES[month-1]} {year}
+          </div>
+          {anomLoading ? (
+            <div style={{padding:32, textAlign:'center'}}><Spinner size={24}/></div>
+          ) : anomalies.length === 0 ? (
+            <div style={{padding:40, textAlign:'center', color:'var(--green)'}}>
+              <div style={{fontSize:40, marginBottom:12}}>✅</div>
+              <div style={{fontWeight:700, fontSize:16}}>Aucune anomalie détectée</div>
+              <div style={{fontSize:12, color:'var(--tm)', marginTop:4}}>{anomData?.analyzed||0} bulletins analysés — tout est conforme</div>
+            </div>
+          ) : anomalies.map((a:any, i:number) => {
+            const cfg = SEVERITY_CONFIG[a.severity as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.info;
+            return (
+              <div key={i} style={{padding:'14px 18px', borderBottom:'1px solid var(--b1)', background: i%2?'var(--surf2)':undefined}}>
+                <div style={{display:'flex', alignItems:'flex-start', gap:12}}>
+                  <span style={{fontSize:18, flexShrink:0, marginTop:1}}>{cfg.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+                      <span style={{fontWeight:800, fontSize:13}}>{a.employee_name}</span>
+                      <span style={{fontSize:10, fontWeight:700, color:cfg.color, background:cfg.bg, padding:'2px 8px', borderRadius:20}}>{a.type}</span>
+                      <span style={{fontSize:10, fontWeight:700, color:cfg.color}}>{cfg.label}</span>
+                    </div>
+                    <div style={{fontSize:12, color:'var(--t1)', marginTop:3}}>{a.message}</div>
+                    {(a.expected || a.actual) && (
+                      <div style={{display:'flex', gap:16, marginTop:4, fontSize:11}}>
+                        {a.expected && <span style={{color:'var(--green)'}}>✓ Attendu: {a.expected}</span>}
+                        {a.actual   && <span style={{color:cfg.color}}>✗ Constaté: {a.actual}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tendances mensuelles */}
+        <div className="card">
+          <div style={{padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:14}}>
+            📈 Tendances masse salariale {year}
+          </div>
+          {trendLoading ? <div style={{padding:32,textAlign:'center'}}><Spinner size={20}/></div>
+          : monthly.length === 0 ? (
+            <div style={{padding:24, textAlign:'center', color:'var(--tm)', fontSize:12}}>Aucune donnée disponible</div>
+          ) : (
+            <>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', fontSize:12}}>
+                  <thead>
+                    <tr style={{background:'var(--surf2)'}}>
+                      {['Mois','Employés','Brut CHF','Net CHF','Charges patr.'].map(h=>(
+                        <th key={h} style={{padding:'8px 12px', textAlign:'right', color:'var(--tm)', fontWeight:700, fontSize:11, borderBottom:'1px solid var(--b1)'}}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthly.map((m:any) => (
+                      <tr key={m.period_month} style={{borderBottom:'1px solid var(--b1)'}}>
+                        <td style={{padding:'8px 12px', fontWeight:700}}>{MONTH_NAMES[m.period_month-1]}</td>
+                        <td style={{padding:'8px 12px', textAlign:'right'}}>{m.employee_count}</td>
+                        <td style={{padding:'8px 12px', textAlign:'right', fontFamily:'var(--mono)'}}>{Number(m.total_gross).toLocaleString('fr-CH', {minimumFractionDigits:2})}</td>
+                        <td style={{padding:'8px 12px', textAlign:'right', fontFamily:'var(--mono)'}}>{Number(m.total_net).toLocaleString('fr-CH', {minimumFractionDigits:2})}</td>
+                        <td style={{padding:'8px 12px', textAlign:'right', fontFamily:'var(--mono)', color:'var(--amber)'}}>{Number(m.total_employer_cost).toLocaleString('fr-CH', {minimumFractionDigits:2})}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {projection && (
+                <div style={{padding:'12px 18px', background:'var(--blued)', borderTop:'1px solid var(--b1)', display:'flex', gap:24, flexWrap:'wrap'}}>
+                  <div>
+                    <div style={{fontSize:9, color:'var(--tm)', textTransform:'uppercase', fontWeight:700}}>Projection annuelle</div>
+                    <div style={{fontSize:16, fontWeight:900, color:'var(--blue)'}}>
+                      CHF {Number(projection.estimated_annual_gross).toLocaleString('fr-CH', {minimumFractionDigits:0, maximumFractionDigits:0})}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9, color:'var(--tm)', textTransform:'uppercase', fontWeight:700}}>Croissance M/M</div>
+                    <div style={{fontSize:16, fontWeight:900, color:'var(--green)'}}>{projection.monthly_growth_rate}</div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
   const PAGES = {
     dashboard: <Dashboard user={user}/>,
     employees: <Employees/>,
@@ -4351,6 +4969,9 @@ function Tenants() {
       </div>
     </div>,
     documents: <Placeholder icon="📄" title="Documents RH" desc="Contrats CO 330a, attestations, certificats de travail."/>,
+    shifts:    <ShiftsPlanning/>,
+    expenses:  <ExpensesPage/>,
+    ai:        <AIAnomalies/>,
   };
 
   return (
