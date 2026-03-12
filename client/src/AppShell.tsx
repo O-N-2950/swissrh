@@ -2751,7 +2751,7 @@ function Reports() {
   const { data: avsD, loading } = useApi(() => apiFetch(`/reports/avs?year=${year}`), [year]);
   const rows = avsD?.declarations || [];
 
-  return (
+  return (<>
     <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
       <Topbar title="Rapports & Exports" sub="AVS · Lohnausweis · IS cantonaux"/>
       <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
@@ -2760,7 +2760,7 @@ function Reports() {
           {[
             { icon:'🏦', title:'Déclaration AVS', desc:`Masse salariale ${year} — export CSV`, action: () => window.open(`/api/exports/avs.csv?year=${year}`, '_blank'), color:'var(--blue)' },
             { icon:'📋', title:'Lohnausweis', desc:'Certificat de salaire 15 cases (Swissdec)', action: () => setShowLohnausweis(true), color:'var(--purple)' },
-            { icon:'📑', title:'Export ELM XML', desc:`Déclaration AVS/AC/LAA — Swissdec ELM 4.0`, action: () => window.open(\`/api/exports/elm.xml?year=\${year}\`, '_blank'), color:'var(--amber)' },
+            { icon:'📑', title:'Export ELM XML', desc:`Déclaration AVS/AC/LAA — Swissdec ELM 4.0`, action: () => window.open(`/api/exports/elm.xml?year=${year}`, '_blank'), color:'var(--amber)' },
             { icon:'👥', title:'Export employés', desc:'Liste complète — données RH', action: () => window.open('/api/exports/employees.csv', '_blank'), color:'var(--green)' },
           ].map((r, i) => (
             <div key={i} className="card" style={{ padding:20, cursor:'pointer', transition:'box-shadow .2s' }}
@@ -2801,7 +2801,7 @@ function Reports() {
       </div>
     </div>
     {showLohnausweis && <LohnausweisModal year={year} onClose={() => setShowLohnausweis(false)}/>}
-  );
+  </> );
 }
 
 /* ══════════════════════════════════════════════════════════
