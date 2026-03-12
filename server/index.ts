@@ -55,6 +55,9 @@ import { shiftsRouter }            from './api/shifts.js';
 import { onboardingRouter }        from './api/onboarding.js';
 import { expensesRouter }          from './api/expenses.js';
 import { aiRouter }                from './api/ai-anomalies.js';
+import { billingRouter }           from './api/billing.js';
+import { swissdec5Router }         from './api/swissdec5.js';
+import { migrateBilling }          from './db/migrate-billing.js';
 import { migrateSprint3 }          from './db/migrate-sprint3.js';
 import { migrateMultiTenant }      from './db/migrate-multitenant.js';
 import { startPermitAlerts }         from './utils/permit-alerts.js';
@@ -101,7 +104,9 @@ app.use('/api/tenants',    requireAuth, tenantRouter);
 app.use('/api/shifts',     requireAuth, shiftsRouter);
 app.use('/api/onboarding', requireAuth, onboardingRouter);
 app.use('/api/expenses',   requireAuth, expensesRouter);
-app.use('/api/ai',         requireAuth, aiRouter);         // Multi-mandants fiduciaires
+app.use('/api/ai',         requireAuth, aiRouter);
+app.use('/api/billing',    billingRouter);
+app.use('/api/swissdec',   requireAuth, swissdec5Router);
 app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
@@ -156,6 +161,7 @@ async function start() {
   await migrateTerminations();
   await migrateMultiTenant();
   await migrateSprint3();
+  await migrateBilling();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);
