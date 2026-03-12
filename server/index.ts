@@ -56,6 +56,8 @@ import { onboardingRouter }        from './api/onboarding.js';
 import { expensesRouter }          from './api/expenses.js';
 import { aiRouter }                from './api/ai-anomalies.js';
 import { billingRouter }           from './api/billing.js';
+import { publicApiRouter, apiKeysRouter } from './api/public-api.js';
+import { migrateSprint5 }          from './db/migrate-sprint5.js';
 import { swissdec5Router }         from './api/swissdec5.js';
 import { migrateBilling }          from './db/migrate-billing.js';
 import { migrateSprint3 }          from './db/migrate-sprint3.js';
@@ -162,6 +164,7 @@ async function start() {
   await migrateMultiTenant();
   await migrateSprint3();
   await migrateBilling();
+  await migrateSprint5();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);
