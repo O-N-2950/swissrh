@@ -260,3 +260,146 @@ portalRouter.get('/balance/:year', requireAuth, async (req, res) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────
+// GET /api/portal/shifts — Mes shifts (semaine en cours)
+// ─────────────────────────────────────────────────────
+portalRouter.get('/shifts', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user as JwtPayload;
+    const sql  = getSQL();
+    const [emp] = await sql`
+      SELECT id FROM employees
+      WHERE company_id = ${user.companyId}
+        AND (id = ${user.employeeId || 0} OR LOWER(email) = ${user.email.toLowerCase()})
+      LIMIT 1
+    `;
+    if (!emp) return res.status(404).json({ error: 'Employé introuvable' });
+
+    const from = req.query.from as string || new Date().toISOString().slice(0,10);
+    const d = new Date(from);
+    d.setDate(d.getDate() - (d.getDay()||7) + 1);
+    const monday = d.toISOString().slice(0,10);
+    const sunday = new Date(d.getTime() + 6*86400000).toISOString().slice(0,10);
+
+    const shifts = await sql`
+      SELECT id, shift_date, start_time, end_time, break_minutes, role_label, status, notes
+      FROM shifts
+      WHERE employee_id = ${emp.id} AND company_id = ${user.companyId}
+        AND shift_date BETWEEN ${monday} AND ${sunday}
+      ORDER BY shift_date, start_time
+    `;
+    res.json({ ok: true, shifts, week: { monday, sunday } });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────
+// GET /api/portal/onboarding — Mes tâches d'onboarding
+// ─────────────────────────────────────────────────────
+portalRouter.get('/onboarding', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user as JwtPayload;
+    const sql  = getSQL();
+    const [emp] = await sql`
+      SELECT id FROM employees
+      WHERE company_id = ${user.companyId}
+        AND (id = ${user.employeeId || 0} OR LOWER(email) = ${user.email.toLowerCase()})
+      LIMIT 1
+    `;
+    if (!emp) return res.json({ ok: true, tasks: [], progress: 0 });
+
+    const tasks = await sql`
+      SELECT id, title, description, due_date, category, status, completed_at
+      FROM onboarding_tasks
+      WHERE employee_id = ${emp.id} AND company_id = ${user.companyId}
+      ORDER BY due_date NULLS LAST, category
+    `;
+    const done  = tasks.filter((t: any) => t.status === 'done').length;
+    const total = tasks.length;
+    res.json({ ok: true, tasks, progress: total > 0 ? Math.round(done/total*100) : 100, done, total });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────
+// GET /api/portal/expenses — Mes notes de frais
+// ─────────────────────────────────────────────────────
+portalRouter.get('/expenses', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user as JwtPayload;
+    const sql  = getSQL();
+    const [emp] = await sql`
+      SELECT id FROM employees
+      WHERE company_id = ${user.companyId}
+        AND (id = ${user.employeeId || 0} OR LOWER(email) = ${user.email.toLowerCase()})
+      LIMIT 1
+    `;
+    if (!emp) return res.json({ ok: true, reports: [] });
+
+    const reports = await sql`
+      SELECT r.*, COUNT(i.id)::int as items_count
+      FROM expense_reports r
+      LEFT JOIN expense_items i ON i.report_id = r.id
+      WHERE r.employee_id = ${emp.id} AND r.company_id = ${user.companyId}
+      GROUP BY r.id
+      ORDER BY r.created_at DESC LIMIT 24
+    `;
+    const totalPending = reports
+      .filter((r: any) => ['submitted','approved'].includes(r.status))
+      .reduce((s: number, r: any) => s + Number(r.total_amount||0), 0);
+    res.json({ ok: true, reports, totalPending, employeeId: emp.id });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────
+// GET /api/portal/documents — Mes documents RH
+// Liste bulletins + lohnausweis téléchargeables
+// ─────────────────────────────────────────────────────
+portalRouter.get('/documents', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user as JwtPayload;
+    const sql  = getSQL();
+    const [emp] = await sql`
+      SELECT id, first_name, last_name FROM employees
+      WHERE company_id = ${user.companyId}
+        AND (id = ${user.employeeId || 0} OR LOWER(email) = ${user.email.toLowerCase()})
+      LIMIT 1
+    `;
+    if (!emp) return res.json({ ok: true, documents: [] });
+
+    // Bulletins de salaire disponibles
+    const payslips = await sql`
+      SELECT id, period_year, period_month, gross_salary, net_salary, created_at
+      FROM payslips
+      WHERE employee_id = ${emp.id} AND company_id = ${user.companyId}
+      ORDER BY period_year DESC, period_month DESC LIMIT 36
+    `;
+
+    // Lohnausweis par année
+    const lohnausweis = await sql`
+      SELECT DISTINCT period_year,
+        COUNT(*)::int as months_count,
+        SUM(gross_salary)::numeric as annual_gross
+      FROM payslips
+      WHERE employee_id = ${emp.id} AND company_id = ${user.companyId}
+      GROUP BY period_year
+      ORDER BY period_year DESC
+    `;
+
+    res.json({
+      ok: true,
+      employeeId: emp.id,
+      payslips: payslips.map((p: any) => ({
+        ...p,
+        type: 'payslip',
+        label: `Bulletin ${p.period_year}-${String(p.period_month).padStart(2,'0')}`,
+        url:   `/api/salary/payslip/${p.id}/pdf`,
+      })),
+      lohnausweis: lohnausweis.map((l: any) => ({
+        ...l,
+        type: 'lohnausweis',
+        label: `Certificat de salaire ${l.period_year}`,
+        url:   `/api/salary/lohnausweis/${emp.id}/${l.period_year}/pdf`,
+      })),
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
