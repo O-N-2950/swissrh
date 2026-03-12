@@ -1673,6 +1673,8 @@ function PayrollRunModal({ month, year, employees, sector, onClose, onDone }: an
   const [loading, setLoading] = useState(false);
   const [errors, setErrors]   = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
+  const [notifyEmployees, setNotifyEmployees] = useState(true);
+  const [emailSent, setEmailSent] = useState(false);
 
   // Step 1: Preview calculs
   useEffect(() => {
@@ -1727,6 +1729,14 @@ function PayrollRunModal({ month, year, employees, sector, onClose, onDone }: an
     setErrors(errs);
     setLoading(false);
     setStep('done');
+
+    // Email notification admin + optionnel employés
+    try {
+      const notifRes = await apiFetch('/salary/payroll-notify', 'POST', {
+        periodYear: year, periodMonth: month, notifyEmployees,
+      });
+      if (notifRes?.emailSent) setEmailSent(true);
+    } catch { /* non-bloquant */ }
   };
 
   return (
@@ -1803,6 +1813,17 @@ function PayrollRunModal({ month, year, employees, sector, onClose, onDone }: an
                   ℹ Les bulletins PDF seront générés et accessibles individuellement après validation.
                 </div>
 
+                {/* Toggle notifier employés */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, margin:'12px 0 16px',
+                  padding:'10px 14px', background:'var(--surf2)', borderRadius:8 }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, color:'var(--txt)', fontWeight:600 }}>
+                    <input type="checkbox" checked={notifyEmployees}
+                      onChange={e => setNotifyEmployees(e.target.checked)}
+                      style={{ width:15, height:15, accentColor:'var(--blue)', cursor:'pointer' }}/>
+                    📧 Notifier les employés par email (bulletin disponible)
+                  </label>
+                </div>
+
                 <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
                   <button className="btn btn-g" onClick={onClose}>Annuler</button>
                   <button className="btn btn-p" onClick={runPayroll}
@@ -1837,6 +1858,12 @@ function PayrollRunModal({ month, year, employees, sector, onClose, onDone }: an
               <div style={{ background:'var(--redd)', borderRadius:8, padding:'10px 14px', marginBottom:16, textAlign:'left' }}>
                 <div style={{ fontWeight:700, color:'var(--red)', marginBottom:6 }}>⚠ {errors.length} erreur(s)</div>
                 {errors.map((e,i) => <div key={i} style={{ fontSize:11, color:'var(--red)' }}>{e}</div>)}
+              </div>
+            )}
+            {emailSent && (
+              <div style={{ background:'var(--greend)', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'var(--green)', fontWeight:600 }}>
+                ✅ Email de récapitulatif envoyé à l'administrateur
+                {notifyEmployees && ` · Employés notifiés de leur bulletin`}
               </div>
             )}
             <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
@@ -3791,3 +3818,4 @@ export default function AppShell() {
     </>
   );
 }
+
