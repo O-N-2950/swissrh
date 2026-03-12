@@ -49,6 +49,9 @@ import { ssoRouter }                from './auth/sso.js';      // SSO WinWin
 import { terminationsRouter }      from './api/terminations.js';
 import { migrateTerminations }     from './db/migrate-terminations.js';
 import { portalRouter }            from './api/employee-portal.js';
+import { elmRouter }               from './api/elm-lohnausweis.js';
+import { tenantRouter }            from './api/tenants.js';
+import { migrateMultiTenant }      from './db/migrate-multitenant.js';
 import { startPermitAlerts }         from './utils/permit-alerts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -87,6 +90,9 @@ app.use('/api/exports',    requireAuth, exportRouter);   // exports sécurisés 
 app.use('/api/gdpr',       requireAuth, gdprRouter);     // nLPD (CRITIQUE 7)
 app.use('/api/terminations', requireAuth, terminationsRouter); // CO 336c licenciements
 app.use('/api/portal',       requireAuth, portalRouter);       // Employee portal
+app.use('/api/exports',    requireAuth, elmRouter);            // ELM XML + Lohnausweis
+app.use('/api/salary',     requireAuth, elmRouter);            // Lohnausweis PDF routes
+app.use('/api/tenants',    requireAuth, tenantRouter);         // Multi-mandants fiduciaires
 app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
@@ -139,6 +145,7 @@ async function start() {
   await migrateSso();
   await migrateSectorDextra();
   await migrateTerminations();
+  await migrateMultiTenant();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);
@@ -182,4 +189,5 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // cache-bust: 1773133617
+
 
