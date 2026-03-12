@@ -2922,6 +2922,267 @@ function Settings() {
           )}
         </ApiState>
       </div>
+
+      {/* ── Sprint 4 ── */}
+      <BillingSection/>
+      <Swissdec5Section/>
+
+    </div>
+  );
+}
+
+
+/* ══ BillingSection ═══════════════════════════════════════ */
+function BillingSection() {
+  const { data, loading } = useApi(() => apiFetch('/billing/subscription'), []);
+  const sub  = data?.subscription || null;
+  const [plans, setPlans] = useState<any[]>([]);
+  const [showPlans, setShowPlans] = useState(false);
+  const [upgrading, setUpgrading] = useState<string|null>(null);
+
+  const loadPlans = async () => {
+    const d = await apiFetch('/billing/plans');
+    setPlans(d.plans||[]);
+    setShowPlans(true);
+  };
+
+  const checkout = async (planId: string) => {
+    setUpgrading(planId);
+    try {
+      const r = await apiFetch('/billing/checkout', 'POST', {
+        planId,
+        successUrl: window.location.origin + '/?billing=success',
+        cancelUrl:  window.location.origin + '/?billing=cancelled',
+      });
+      if (r.url) window.open(r.url, '_blank');
+    } catch(e:any) { alert(e.message); }
+    setUpgrading(null);
+  };
+
+  const openPortal = async () => {
+    try {
+      const r = await apiFetch('/billing/portal', 'POST');
+      if (r.url) window.open(r.url, '_blank');
+    } catch(e:any) { alert(e.message); }
+  };
+
+  const STATUS_COLORS: Record<string,string> = {
+    trial:'var(--amber)', active:'var(--green)', past_due:'var(--red)',
+    cancelling:'var(--amber)', cancelled:'var(--red)',
+  };
+  const STATUS_LABELS: Record<string,string> = {
+    trial:"Période d'essai", active:'Actif', past_due:'Paiement en retard',
+    cancelling:'Annulation en cours', cancelled:'Annulé',
+  };
+
+  return (
+    <div style={{padding:'0 26px 24px'}}>
+      <div style={{fontWeight:800, fontSize:16, marginBottom:16, display:'flex', alignItems:'center', gap:8}}>
+        💳 Abonnement
+      </div>
+      {loading ? <div style={{padding:16}}><Spinner size={18}/></div>
+      : (
+        <div className="card" style={{padding:20}}>
+          <div style={{display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11, color:'var(--tm)', marginBottom:4, textTransform:'uppercase', fontWeight:700}}>Plan actuel</div>
+              <div style={{fontWeight:900, fontSize:22, textTransform:'capitalize'}}>
+                {sub?.plan || 'Trial'}
+              </div>
+              {sub?.status && (
+                <div style={{fontSize:12, fontWeight:700, color: STATUS_COLORS[sub.status]||'var(--tm)', marginTop:4}}>
+                  {STATUS_LABELS[sub.status]||sub.status}
+                </div>
+              )}
+              {sub?.periodEnd && (
+                <div style={{fontSize:11, color:'var(--tm)', marginTop:2}}>
+                  Renouvellement: {new Date(sub.periodEnd).toLocaleDateString('fr-CH')}
+                </div>
+              )}
+            </div>
+            {sub && (
+              <div style={{textAlign:'center', padding:'0 16px'}}>
+                <div style={{fontSize:10, color:'var(--tm)', textTransform:'uppercase', fontWeight:700}}>Employés</div>
+                <div style={{fontWeight:900, fontSize:20}}>
+                  {sub.employeeCount}
+                  <span style={{fontSize:13, color:'var(--tm)', fontWeight:400}}>
+                    /{sub.maxEmployees === -1 ? '∞' : sub.maxEmployees}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
+              {sub?.hasStripe ? (
+                <button className="btn btn-g" style={{fontSize:11}} onClick={openPortal}>
+                  ⚙️ Gérer abonnement
+                </button>
+              ) : null}
+              <button className="btn btn-p" style={{fontSize:11}} onClick={loadPlans}>
+                🚀 {sub?.hasStripe ? 'Changer plan' : 'Activer abonnement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPlans && (
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setShowPlans(false)}>
+          <div className="modal" style={{padding:24, maxWidth:680}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}>
+              <div style={{fontWeight:800, fontSize:18}}>🚀 Choisir un plan</div>
+              <button onClick={()=>setShowPlans(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:22}}>×</button>
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:14}}>
+              {plans.map((p:any) => (
+                <div key={p.id} style={{border:`2px solid ${p.id==='pro'?'var(--blue)':'var(--b1)'}`, borderRadius:12, padding:18, position:'relative'}}>
+                  {p.id==='pro' && (
+                    <div style={{position:'absolute', top:-11, left:'50%', transform:'translateX(-50%)', background:'var(--blue)', color:'white', fontSize:9, fontWeight:800, padding:'2px 12px', borderRadius:12, whiteSpace:'nowrap'}}>
+                      POPULAIRE
+                    </div>
+                  )}
+                  <div style={{fontWeight:900, fontSize:16, marginBottom:4}}>{p.label}</div>
+                  <div style={{fontSize:26, fontWeight:900, color:'var(--blue)', marginBottom:10}}>
+                    CHF {p.price_chf}
+                    <span style={{fontSize:11, fontWeight:400, color:'var(--tm)'}}>/mois</span>
+                  </div>
+                  <ul style={{listStyle:'none', padding:0, margin:'0 0 16px', fontSize:11, display:'flex', flexDirection:'column', gap:3}}>
+                    {p.features?.map((f:string,i:number) => (
+                      <li key={i} style={{color:'var(--tm)'}}>✓ {f}</li>
+                    ))}
+                  </ul>
+                  <button className="btn btn-p" style={{width:'100%', fontSize:11}}
+                    disabled={upgrading===p.id}
+                    onClick={()=>checkout(p.id)}>
+                    {upgrading===p.id ? <Spinner size={12}/> : `Choisir ${p.label}`}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:14, fontSize:11, color:'var(--tm)', textAlign:'center'}}>
+              Paiement sécurisé Stripe · CHF · Facturation mensuelle · Résiliable à tout moment
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══ Swissdec5Section ════════════════════════════════════════ */
+function Swissdec5Section() {
+  const [year, setYear] = useState(YEAR);
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState<any>(null);
+  const { data: histData, reload: reloadHist } = useApi(() => apiFetch('/swissdec/history'), []);
+  const history: any[] = histData?.history || [];
+
+  const validate = async () => {
+    setValidating(true);
+    try {
+      const d = await apiFetch(`/swissdec/validate?year=${year}`);
+      setValidation(d);
+    } catch(e:any) { alert(e.message); }
+    setValidating(false);
+  };
+
+  const submit = async (monthly: boolean) => {
+    const url = monthly
+      ? `/swissdec/submit?year=${year}&month=${MONTH}`
+      : `/swissdec/submit?year=${year}`;
+    try {
+      await apiFetch(url, 'POST');
+      reloadHist();
+      alert('Déclaration enregistrée ✅');
+    } catch(e:any) { alert(e.message); }
+  };
+
+  const SEV_COLORS: Record<string,string> = {
+    error:'var(--red)', warning:'var(--amber)', info:'var(--blue)'
+  };
+  const STATUS_COLORS: Record<string,string> = {
+    pending:'var(--amber)', sent:'var(--blue)', accepted:'var(--green)',
+    rejected:'var(--red)', error:'var(--red)'
+  };
+
+  return (
+    <div style={{padding:'0 26px 24px'}}>
+      <div style={{fontWeight:800, fontSize:16, marginBottom:16}}>🏛️ Swissdec 5.0</div>
+      <div className="card" style={{padding:20}}>
+
+        {/* Contrôles */}
+        <div style={{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:16}}>
+          <select className="inp" style={{width:80}} value={year} onChange={e=>setYear(+e.target.value)}>
+            {[YEAR-2,YEAR-1,YEAR,YEAR+1].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          <button className="btn btn-g" style={{fontSize:11}} onClick={validate} disabled={validating}>
+            {validating ? <Spinner size={12}/> : '🔍 Valider'}
+          </button>
+          <button className="btn btn-p" style={{fontSize:11}}
+            onClick={()=>window.open(`/api/swissdec/elm5?year=${year}`, '_blank')}>
+            📑 ELM 5.0 annuel
+          </button>
+          <button className="btn btn-g" style={{fontSize:11}}
+            onClick={()=>window.open(`/api/swissdec/elm5?year=${year}&month=${MONTH}`, '_blank')}>
+            📅 ELM mensuel
+          </button>
+          <button className="btn btn-g" style={{fontSize:11}} onClick={()=>submit(false)}>
+            📤 Enregistrer décl.
+          </button>
+        </div>
+
+        {/* Résultat validation */}
+        {validation && (
+          <div style={{marginBottom:16, borderTop:'1px solid var(--b1)', paddingTop:14}}>
+            <div style={{display:'flex', gap:10, marginBottom:10}}>
+              {[
+                ['Erreurs',   validation.errors,   'var(--red)'],
+                ['Avert.',    validation.warnings, 'var(--amber)'],
+                ['Infos',     validation.infos,    'var(--blue)'],
+              ].map(([label,val,color])=>(
+                <div key={String(label)} style={{flex:1, background:'var(--surf2)', borderRadius:8, padding:'8px 10px', textAlign:'center'}}>
+                  <div style={{fontSize:10, color:'var(--tm)', marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:22, fontWeight:900, color:String(color)}}>{val}</div>
+                </div>
+              ))}
+            </div>
+            {validation.isValid
+              ? <div style={{background:'rgba(16,185,129,.1)', border:'1px solid var(--green)', borderRadius:7, padding:'8px 12px', fontSize:12, color:'var(--green)', fontWeight:700}}>
+                  ✅ Structure ELM valide — prêt pour soumission sur portail Swissdec
+                </div>
+              : <div style={{background:'rgba(220,38,38,.06)', border:'1px solid var(--red)', borderRadius:7, padding:'8px 12px', fontSize:12, color:'var(--red)', fontWeight:700}}>
+                  ❌ {validation.errors} erreur(s) à corriger avant soumission
+                </div>
+            }
+            {(validation.issues||[]).slice(0,10).map((issue:any, i:number) => (
+              <div key={i} style={{padding:'5px 8px', borderBottom:'1px solid var(--b1)', fontSize:11, display:'flex', gap:8, alignItems:'flex-start', marginTop:2}}>
+                <span style={{color:SEV_COLORS[issue.severity]||'var(--tm)', fontWeight:800, flexShrink:0, fontSize:10}}>
+                  {issue.severity.toUpperCase()}
+                </span>
+                <span style={{color:'var(--tm)', flexShrink:0}}>{issue.field}</span>
+                <span style={{flex:1, color:'var(--t1)'}}>{issue.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Historique */}
+        {history.length > 0 && (
+          <div style={{borderTop:'1px solid var(--b1)', paddingTop:14}}>
+            <div style={{fontWeight:700, fontSize:12, marginBottom:8, color:'var(--tm)', textTransform:'uppercase'}}>
+              Historique soumissions
+            </div>
+            {history.slice(0,6).map((h:any) => (
+              <div key={h.id} style={{display:'flex', gap:10, alignItems:'center', padding:'6px 4px', borderBottom:'1px solid var(--b1)', fontSize:11}}>
+                <span style={{fontWeight:700, minWidth:60}}>{h.year}{h.month?'/'+String(h.month).padStart(2,'0'):''}</span>
+                <span style={{color:'var(--tm)', textTransform:'capitalize', minWidth:70}}>{h.declaration_type}</span>
+                <span style={{fontWeight:700, color:STATUS_COLORS[h.status]||'var(--tm)', flex:1}}>{h.status}</span>
+                <span style={{color:'var(--tm)'}}>{new Date(h.submitted_at).toLocaleDateString('fr-CH')}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
@@ -3539,10 +3800,13 @@ function PortalHeader({ emp, onLogout }: { emp: any, onLogout?: () => void }) {
 
 function PortalTabBar({ tab, setTab }: { tab: string, setTab: (t: string) => void }) {
   const TABS = [
-    { id:'home',     icon:'🏠', label:'Accueil' },
-    { id:'payslips', icon:'💶', label:'Bulletins' },
-    { id:'absences', icon:'📅', label:'Absences' },
-    { id:'request',  icon:'✉️', label:'Demande' },
+    { id:'home',      icon:'🏠', label:'Accueil' },
+    { id:'payslips',  icon:'💶', label:'Bulletins' },
+    { id:'absences',  icon:'📅', label:'Absences' },
+    { id:'request',   icon:'✉️', label:'Demande' },
+    { id:'shifts',    icon:'📋', label:'Planning' },
+    { id:'expenses',  icon:'🧾', label:'Frais' },
+    { id:'documents', icon:'📄', label:'Docs' },
   ];
   return (
     <div style={{
@@ -3568,6 +3832,190 @@ function PortalTabBar({ tab, setTab }: { tab: string, setTab: (t: string) => voi
 }
 
 /* ── Accueil ── */
+
+/* ══ PORTAIL — Planning shifts employé ══════════════════════ */
+const DAYS_FR2 = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+function PortalShifts() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const monday = (() => {
+    const d = new Date(); d.setDate(d.getDate() - (d.getDay()||7) + 1 + weekOffset*7);
+    return d.toISOString().slice(0,10);
+  })();
+  const { data, loading } = useApi(() => apiFetch(`/portal/shifts?from=${monday}`), [monday]);
+  const shifts: any[] = data?.shifts || [];
+  const week = data?.week || { monday, sunday: monday };
+
+  const weekDays = Array.from({length:7}, (_,i) => {
+    const d = new Date(monday); d.setDate(d.getDate()+i);
+    return d.toISOString().slice(0,10);
+  });
+
+  return (
+    <div style={{padding:'16px 16px 24px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:16}}>
+        <button className="btn btn-g" style={{fontSize:13}} onClick={()=>setWeekOffset(o=>o-1)}>‹</button>
+        <div style={{fontWeight:700, fontSize:13, flex:1, textAlign:'center'}}>
+          Semaine du {new Date(monday).toLocaleDateString('fr-CH',{day:'2-digit',month:'long'})}
+        </div>
+        <button className="btn btn-g" style={{fontSize:13}} onClick={()=>setWeekOffset(o=>o+1)}>›</button>
+      </div>
+      {loading ? <div style={{textAlign:'center',padding:24}}><Spinner size={20}/></div>
+      : shifts.length === 0 ? (
+        <div style={{textAlign:'center', padding:32, color:'var(--tm)', fontSize:13}}>
+          <div style={{fontSize:32, marginBottom:8}}>📋</div>
+          Aucun shift planifié cette semaine
+        </div>
+      ) : (
+        <div style={{display:'flex', flexDirection:'column', gap:8}}>
+          {weekDays.map((d,i) => {
+            const dayShifts = shifts.filter((s:any) => s.shift_date?.slice(0,10) === d);
+            const isToday = d === new Date().toISOString().slice(0,10);
+            if (dayShifts.length === 0 && !isToday) return null;
+            return (
+              <div key={d} style={{background: isToday ? 'var(--blued)' : 'var(--surf)', borderRadius:10, padding:'12px 14px', border: isToday?'1px solid var(--blue)':'1px solid var(--b1)'}}>
+                <div style={{fontWeight:700, fontSize:12, marginBottom:6, color: isToday?'var(--blue)':'var(--t1)'}}>
+                  {DAYS_FR2[i]} {new Date(d).toLocaleDateString('fr-CH',{day:'2-digit',month:'short'})}
+                  {isToday && <span style={{marginLeft:6, fontSize:9, background:'var(--blue)', color:'white', padding:'1px 6px', borderRadius:8}}>Aujourd'hui</span>}
+                </div>
+                {dayShifts.length === 0 ? (
+                  <div style={{fontSize:12, color:'var(--tm)'}}>Pas de shift</div>
+                ) : dayShifts.map((s:any) => (
+                  <div key={s.id} style={{display:'flex', alignItems:'center', gap:10, background:'var(--blue)', color:'white', borderRadius:7, padding:'8px 12px', marginBottom:4}}>
+                    <span style={{fontSize:16}}>🕐</span>
+                    <div>
+                      <div style={{fontWeight:700, fontSize:13}}>{s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</div>
+                      {s.role_label && <div style={{fontSize:10, opacity:0.8}}>{s.role_label}</div>}
+                    </div>
+                    <span style={{marginLeft:'auto', fontSize:10, opacity:0.8, textTransform:'capitalize'}}>{s.status}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          }).filter(Boolean)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══ PORTAIL — Notes de frais employé ══════════════════════ */
+function PortalExpenses({ employeeId }: { employeeId?: number }) {
+  const { data, loading } = useApi(() => apiFetch('/portal/expenses'), []);
+  const reports: any[] = data?.reports || [];
+  const totalPending = data?.totalPending || 0;
+  const STATUS_COLORS: Record<string, string> = {
+    draft:'var(--tm)', submitted:'var(--amber)', approved:'var(--green)', rejected:'var(--red)', paid:'var(--blue)'
+  };
+  const STATUS_LABELS: Record<string, string> = {
+    draft:'Brouillon', submitted:'Soumis', approved:'Approuvé', rejected:'Refusé', paid:'Payé'
+  };
+  return (
+    <div style={{padding:'16px 16px 24px'}}>
+      {totalPending > 0 && (
+        <div style={{background:'var(--blued)', border:'1px solid var(--blue)', borderRadius:8, padding:'10px 14px', marginBottom:12, fontSize:12}}>
+          <span style={{fontWeight:700, color:'var(--blue)'}}>CHF {Number(totalPending).toFixed(2)}</span>
+          <span style={{color:'var(--tm)'}}> en cours de traitement</span>
+        </div>
+      )}
+      {loading ? <div style={{textAlign:'center',padding:24}}><Spinner size={20}/></div>
+      : reports.length === 0 ? (
+        <div style={{textAlign:'center', padding:32, color:'var(--tm)', fontSize:13}}>
+          <div style={{fontSize:32, marginBottom:8}}>🧾</div>
+          Aucune note de frais
+        </div>
+      ) : reports.map((r:any) => (
+        <div key={r.id} style={{background:'var(--surf)', borderRadius:10, padding:'12px 14px', marginBottom:8, border:'1px solid var(--b1)'}}>
+          <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4}}>
+            <div style={{fontWeight:700, fontSize:13}}>{r.title}</div>
+            <span style={{fontSize:10, fontWeight:700, color: STATUS_COLORS[r.status]||'var(--tm)', background:`${STATUS_COLORS[r.status]||'var(--tm)'}20`, padding:'2px 8px', borderRadius:12}}>
+              {STATUS_LABELS[r.status]||r.status}
+            </span>
+          </div>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <span style={{fontSize:11, color:'var(--tm)'}}>{r.period_year}/{String(r.period_month).padStart(2,'0')} · {r.items_count} item(s)</span>
+            <span style={{fontWeight:800, fontSize:14, color:'var(--blue)'}}>CHF {Number(r.total_amount||0).toFixed(2)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ PORTAIL — Documents RH ════════════════════════════════ */
+function PortalDocuments({ employeeId }: { employeeId?: number }) {
+  const { data, loading } = useApi(() => apiFetch('/portal/documents'), []);
+  const payslips: any[]    = data?.payslips    || [];
+  const lohnausweis: any[] = data?.lohnausweis || [];
+  const [downloading, setDownloading] = useState<string|null>(null);
+
+  const download = async (url: string, label: string) => {
+    setDownloading(label);
+    try {
+      const resp = await fetch('/api' + url, { credentials:'include' });
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = label.replace(/[^a-z0-9]/gi,'-').toLowerCase() + '.pdf';
+      a.click();
+    } catch(e) { alert('Erreur téléchargement'); }
+    setDownloading(null);
+  };
+
+  return (
+    <div style={{padding:'16px 16px 24px'}}>
+      {loading ? <div style={{textAlign:'center',padding:24}}><Spinner size={20}/></div> : <>
+
+      {/* Certificats de salaire */}
+      {lohnausweis.length > 0 && (
+        <div style={{marginBottom:20}}>
+          <div style={{fontWeight:700, fontSize:13, marginBottom:10}}>📋 Certificats de salaire (Lohnausweis)</div>
+          {lohnausweis.map((l:any) => (
+            <div key={l.period_year} style={{background:'var(--surf)', borderRadius:10, padding:'12px 14px', marginBottom:6, border:'1px solid var(--b1)', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontWeight:700, fontSize:13}}>Certificat {l.period_year}</div>
+                <div style={{fontSize:11, color:'var(--tm)'}}>{l.months_count} mois · CHF {Number(l.annual_gross).toLocaleString('fr-CH',{minimumFractionDigits:0})}</div>
+              </div>
+              <button className="btn btn-p" style={{fontSize:11}}
+                disabled={downloading===l.label}
+                onClick={()=>download(l.url, l.label)}>
+                {downloading===l.label ? <Spinner size={12}/> : '📥 PDF'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bulletins de salaire */}
+      {payslips.length > 0 && (
+        <div>
+          <div style={{fontWeight:700, fontSize:13, marginBottom:10}}>💶 Bulletins de salaire</div>
+          {payslips.map((p:any) => (
+            <div key={p.id} style={{background:'var(--surf)', borderRadius:10, padding:'10px 14px', marginBottom:6, border:'1px solid var(--b1)', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontWeight:700, fontSize:12}}>{p.label}</div>
+                <div style={{fontSize:11, color:'var(--tm)'}}>Brut CHF {Number(p.gross_salary).toLocaleString('fr-CH',{minimumFractionDigits:2})} · Net CHF {Number(p.net_salary).toLocaleString('fr-CH',{minimumFractionDigits:2})}</div>
+              </div>
+              <button className="btn btn-g" style={{fontSize:11}}
+                disabled={downloading===p.label}
+                onClick={()=>download(p.url, p.label)}>
+                {downloading===p.label ? <Spinner size={12}/> : '📥'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lohnausweis.length === 0 && payslips.length === 0 && (
+        <div style={{textAlign:'center', padding:32, color:'var(--tm)', fontSize:13}}>
+          <div style={{fontSize:32, marginBottom:8}}>📄</div>
+          Aucun document disponible
+        </div>
+      )}
+      </>}
+    </div>
+  );
+}
+
 function PortalHome({ emp, balance, year }: { emp: any, balance: any, year: number }) {
   const daysLeft = (balance?.balance_days || 0) - (balance?.used_days || 0) - (balance?.pending_days || 0);
   const permitExpiring = emp?.permit_expiry && new Date(emp.permit_expiry) < new Date(Date.now() + 60*86400000);
@@ -3900,6 +4348,9 @@ function EmployeePortal({ user, onLogout }: { user: any, onLogout: () => void })
         {tab === 'payslips' && <PortalPayslips employeeId={meData?.employee?.id || user.employeeId}/>}
         {tab === 'absences' && <PortalAbsences/>}
         {tab === 'request'  && <PortalLeaveRequest onSubmitted={handleAbsenceSubmitted}/>}
+        {tab === 'shifts'   && <PortalShifts/>}
+        {tab === 'expenses' && <PortalExpenses employeeId={meData?.employee?.id}/>}
+        {tab === 'documents'&& <PortalDocuments employeeId={meData?.employee?.id}/>}
       </div>
     </>
   );
