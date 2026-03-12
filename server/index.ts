@@ -51,6 +51,11 @@ import { migrateTerminations }     from './db/migrate-terminations.js';
 import { portalRouter }            from './api/employee-portal.js';
 import { elmRouter }               from './api/elm-lohnausweis.js';
 import { tenantRouter }            from './api/tenants.js';
+import { shiftsRouter }            from './api/shifts.js';
+import { onboardingRouter }        from './api/onboarding.js';
+import { expensesRouter }          from './api/expenses.js';
+import { aiRouter }                from './api/ai-anomalies.js';
+import { migrateSprint3 }          from './db/migrate-sprint3.js';
 import { migrateMultiTenant }      from './db/migrate-multitenant.js';
 import { startPermitAlerts }         from './utils/permit-alerts.js';
 
@@ -92,7 +97,11 @@ app.use('/api/terminations', requireAuth, terminationsRouter); // CO 336c licenc
 app.use('/api/portal',       requireAuth, portalRouter);       // Employee portal
 app.use('/api/exports',    requireAuth, elmRouter);            // ELM XML + Lohnausweis
 app.use('/api/salary',     requireAuth, elmRouter);            // Lohnausweis PDF routes
-app.use('/api/tenants',    requireAuth, tenantRouter);         // Multi-mandants fiduciaires
+app.use('/api/tenants',    requireAuth, tenantRouter);
+app.use('/api/shifts',     requireAuth, shiftsRouter);
+app.use('/api/onboarding', requireAuth, onboardingRouter);
+app.use('/api/expenses',   requireAuth, expensesRouter);
+app.use('/api/ai',         requireAuth, aiRouter);         // Multi-mandants fiduciaires
 app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
@@ -146,6 +155,7 @@ async function start() {
   await migrateSectorDextra();
   await migrateTerminations();
   await migrateMultiTenant();
+  await migrateSprint3();
       console.log('✅ Migrations OK');
     } catch (e: any) {
       console.error('💥 Migration error:', e.message);
