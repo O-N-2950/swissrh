@@ -412,6 +412,7 @@ const NAV = [
   { id:"shifts",    em:"📅", lb:"Planning"       },
   { id:"expenses",  em:"🧾", lb:"Frais"           },
   { id:"ai",        em:"🤖", lb:"IA Anomalies"    },
+  { id:"api",       em:"🔌", lb:"API"             },
 ];
 
 function Sidebar({ page, setPage, open, setOpen, user, onLogout }) {
@@ -5399,6 +5400,228 @@ function AIAnomalies() {
   );
 }
 
+
+/* ══════════════════════════════════════════════════════════
+   PWA INSTALL BANNER
+══════════════════════════════════════════════════════════ */
+function PWAInstallBanner() {
+  const [show, setShow] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const onAvail = () => setShow(true);
+    window.addEventListener('pwa-install-available', onAvail);
+    if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true);
+    return () => window.removeEventListener('pwa-install-available', onAvail);
+  }, []);
+
+  if (!show || installed) return null;
+
+  const install = async () => {
+    const accepted = await (window as any).showPWAInstallPrompt?.();
+    if (accepted) setInstalled(true);
+    setShow(false);
+  };
+
+  return (
+    <div style={{
+      position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)',
+      background:'var(--sb)', color:'white', borderRadius:12, padding:'12px 20px',
+      display:'flex', alignItems:'center', gap:12, zIndex:9999,
+      boxShadow:'0 8px 32px rgba(0,0,0,.4)', maxWidth:380, width:'calc(100% - 32px)',
+    }}>
+      <span style={{fontSize:24}}>📱</span>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:700, fontSize:13}}>Installer SwissRH</div>
+        <div style={{fontSize:11, opacity:.7}}>Accès rapide depuis l'écran d'accueil</div>
+      </div>
+      <button className="btn btn-p" style={{fontSize:11, flexShrink:0}} onClick={install}>Installer</button>
+      <button onClick={()=>setShow(false)} style={{background:'none',border:'none',color:'white',cursor:'pointer',fontSize:16,flexShrink:0}}>×</button>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGE: API PUBLIQUE & CLÉS
+══════════════════════════════════════════════════════════ */
+function APIPage() {
+  const w = useW();
+  const { data, loading, reload } = useApi(() => apiFetch('/keys'), []);
+  const keys: any[] = data?.keys || [];
+  const [showNew, setShowNew] = useState(false);
+  const [newKey, setNewKey]   = useState<any>(null);
+  const [form, setForm]       = useState({ name:'', expires_days:'' });
+  const [saving, setSaving]   = useState(false);
+
+  const createKey = async () => {
+    setSaving(true);
+    try {
+      const r = await apiFetch('/keys', 'POST', {
+        name: form.name,
+        scopes: ['read'],
+        expires_days: form.expires_days ? Number(form.expires_days) : undefined,
+      });
+      setNewKey(r);
+      setShowNew(false);
+      reload();
+    } catch(e:any) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const revokeKey = async (id: number) => {
+    if (!confirm('Révoquer cette clé ? Toutes les intégrations utilisant cette clé cesseront de fonctionner.')) return;
+    await apiFetch(`/keys/${id}`, 'DELETE');
+    reload();
+  };
+
+  const ENDPOINTS = [
+    { method:'GET',  path:'/api/v1/status',            desc:'Sanity check — pas d\'auth requise' },
+    { method:'GET',  path:'/api/v1/employees',          desc:'Liste employés actifs' },
+    { method:'GET',  path:'/api/v1/employees/:id',      desc:'Détail employé' },
+    { method:'GET',  path:'/api/v1/payslips',           desc:'Bulletins (year=, month=, employee_id=)' },
+    { method:'GET',  path:'/api/v1/payslips/:id',       desc:'Bulletin détaillé' },
+    { method:'GET',  path:'/api/v1/absences',           desc:'Absences (from=, to=, status=)' },
+    { method:'GET',  path:'/api/v1/shifts',             desc:'Shifts (from=, to=)' },
+    { method:'GET',  path:'/api/v1/reports/summary',    desc:'Résumé annuel (year=)' },
+  ];
+
+  return (
+    <div style={{flex:1, overflowY:'auto', paddingBottom: w<768?68:0}}>
+      <Topbar title="API Publique" sub="Intégrations tierces · Clés sécurisées · Rate limit 100 req/h"
+        actions={<button className="btn btn-p" style={{fontSize:11}} onClick={()=>setShowNew(true)}>+ Créer clé</button>}/>
+      <div style={{padding:'14px 18px', display:'flex', flexDirection:'column', gap:16}}>
+
+        {/* Clés actives */}
+        <div className="card" style={{padding:0, overflow:'hidden'}}>
+          <div style={{padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:14, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            🔑 Clés API
+            <span style={{fontSize:11, color:'var(--tm)', fontWeight:400}}>{keys.filter(k=>k.is_active).length} active(s)</span>
+          </div>
+          {loading ? <div style={{padding:24,textAlign:'center'}}><Spinner size={20}/></div>
+          : keys.length === 0 ? (
+            <div style={{padding:32, textAlign:'center', color:'var(--tm)', fontSize:12}}>
+              Aucune clé — créez-en une pour accéder à l'API
+            </div>
+          ) : keys.map((k:any) => (
+            <div key={k.id} style={{padding:'12px 18px', borderBottom:'1px solid var(--b1)', display:'flex', alignItems:'center', gap:14}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700, fontSize:13, display:'flex', alignItems:'center', gap:8}}>
+                  {k.name}
+                  {!k.is_active && <span style={{fontSize:9, background:'rgba(220,38,38,.1)', color:'var(--red)', padding:'1px 6px', borderRadius:8, fontWeight:700}}>RÉVOQUÉE</span>}
+                </div>
+                <div style={{fontSize:11, color:'var(--tm)', marginTop:2, fontFamily:'var(--mono)'}}>
+                  {k.key_prefix}••••••••••••••
+                  {k.expires_at && <span style={{marginLeft:10}}>expire {new Date(k.expires_at).toLocaleDateString('fr-CH')}</span>}
+                </div>
+              </div>
+              <div style={{textAlign:'right', fontSize:11, color:'var(--tm)'}}>
+                <div>{k.request_count} req</div>
+                <div>{k.last_used ? new Date(k.last_used).toLocaleDateString('fr-CH') : 'Jamais'}</div>
+              </div>
+              {k.is_active && (
+                <button onClick={()=>revokeKey(k.id)}
+                  style={{background:'none',border:'1px solid var(--red)',color:'var(--red)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11}}>
+                  Révoquer
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Endpoints */}
+        <div className="card" style={{padding:0, overflow:'hidden'}}>
+          <div style={{padding:'14px 18px', borderBottom:'1px solid var(--b1)', fontWeight:700, fontSize:14}}>
+            📚 Endpoints disponibles
+          </div>
+          <div style={{padding:'10px 18px 4px', fontSize:11, color:'var(--tm)', borderBottom:'1px solid var(--b1)'}}>
+            Auth: <code style={{fontFamily:'var(--mono)', background:'var(--surf2)', padding:'1px 6px', borderRadius:4}}>X-API-Key: srh_live_xxxx</code>
+            &nbsp;·&nbsp; Base URL: <code style={{fontFamily:'var(--mono)', background:'var(--surf2)', padding:'1px 6px', borderRadius:4}}>https://swissrh.ch</code>
+          </div>
+          {ENDPOINTS.map((ep,i) => (
+            <div key={i} style={{padding:'10px 18px', borderBottom:'1px solid var(--b1)', display:'flex', alignItems:'center', gap:12}}>
+              <span style={{
+                fontSize:9, fontWeight:700, padding:'3px 7px', borderRadius:4, minWidth:38, textAlign:'center',
+                background: ep.method==='GET' ? 'rgba(16,185,129,.15)' : 'rgba(245,158,11,.15)',
+                color:      ep.method==='GET' ? 'var(--green)'          : 'var(--amber)',
+              }}>{ep.method}</span>
+              <code style={{fontFamily:'var(--mono)', fontSize:12, flex:1, color:'var(--t1)'}}>{ep.path}</code>
+              <span style={{fontSize:11, color:'var(--tm)', flexShrink:0, maxWidth:200, textAlign:'right'}}>{ep.desc}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Exemple curl */}
+        <div className="card" style={{padding:16}}>
+          <div style={{fontWeight:700, fontSize:13, marginBottom:10}}>💡 Exemple d'utilisation</div>
+          <pre style={{background:'var(--surf2)', borderRadius:8, padding:'12px 14px', fontSize:11, overflowX:'auto', margin:0, color:'var(--t1)', fontFamily:'var(--mono)'}}>
+{`# Lister les employés
+curl -H "X-API-Key: srh_live_votre_cle" \\
+     https://swissrh.ch/api/v1/employees
+
+# Bulletins du mois
+curl -H "X-API-Key: srh_live_votre_cle" \\
+     "https://swissrh.ch/api/v1/payslips?year=${YEAR}&month=${MONTH}"
+
+# Résumé annuel
+curl -H "X-API-Key: srh_live_votre_cle" \\
+     "https://swissrh.ch/api/v1/reports/summary?year=${YEAR}"`}
+          </pre>
+        </div>
+
+      </div>
+
+      {/* Modal nouvelle clé */}
+      {showNew && (
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setShowNew(false)}>
+          <div className="modal" style={{padding:24, maxWidth:400}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}>
+              <div style={{fontWeight:800, fontSize:16}}>🔑 Nouvelle clé API</div>
+              <button onClick={()=>setShowNew(false)} style={{background:'none',border:'none',cursor:'pointer',fontSize:20}}>×</button>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Nom de la clé *</label>
+                <input className="inp" type="text" placeholder="Ex: Intégration Abacus, Webhook N8N..." value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+              </div>
+              <div>
+                <label style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--tm)',display:'block',marginBottom:4}}>Expiration (jours, vide = jamais)</label>
+                <input className="inp" type="number" placeholder="365" value={form.expires_days} onChange={e=>setForm(f=>({...f,expires_days:e.target.value}))}/>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:20}}>
+              <button className="btn btn-g" onClick={()=>setShowNew(false)}>Annuler</button>
+              <button className="btn btn-p" onClick={createKey} disabled={saving||!form.name}>
+                {saving?<Spinner size={14}/>:'✅ Créer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal affichage clé créée */}
+      {newKey && (
+        <div className="overlay">
+          <div className="modal" style={{padding:24, maxWidth:440}}>
+            <div style={{fontWeight:800, fontSize:16, marginBottom:16}}>✅ Clé créée — copiez-la maintenant</div>
+            <div style={{background:'rgba(220,38,38,.07)', border:'1px solid var(--red)', borderRadius:8, padding:'10px 14px', fontSize:12, color:'var(--red)', fontWeight:700, marginBottom:14}}>
+              ⚠️ Cette clé ne sera plus affichée après fermeture de cette fenêtre
+            </div>
+            <div style={{background:'var(--surf2)', borderRadius:8, padding:'12px 14px', fontFamily:'var(--mono)', fontSize:12, wordBreak:'break-all', marginBottom:16}}>
+              {newKey.key?.api_key}
+            </div>
+            <div style={{display:'flex', gap:8}}>
+              <button className="btn btn-p" style={{flex:1}} onClick={()=>{navigator.clipboard.writeText(newKey.key?.api_key||''); alert('Copié !');}}>
+                📋 Copier
+              </button>
+              <button className="btn btn-g" onClick={()=>setNewKey(null)}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
   const PAGES = {
     dashboard: <Dashboard user={user}/>,
     employees: <Employees/>,
@@ -5423,6 +5646,7 @@ function AIAnomalies() {
     shifts:    <ShiftsPlanning/>,
     expenses:  <ExpensesPage/>,
     ai:        <AIAnomalies/>,
+    api:       <APIPage/>,
   };
 
   return (
