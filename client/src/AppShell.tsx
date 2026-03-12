@@ -2273,8 +2273,11 @@ function Employees() {
 
 function Absences() {
   const w = useW();
-  const [f, setF] = useState('all');
+  const [f, setF]         = useState('all');
+  const [view, setView]   = useState<'list'|'calendar'>('list');
   const [showNew, setShowNew] = useState(false);
+  const [calMonth, setCalMonth] = useState(MONTH);
+  const [calYear, setCalYear]   = useState(YEAR);
   const p = w < 600 ? '14px 12px' : '18px 26px';
   const COLORS = { 'Vacances':'#10b981','vacation':'#10b981','Maladie':'#ef4444','illness':'#ef4444','Accident NP':'#f59e0b','accident_np':'#f59e0b','Famille':'#3176A6','family':'#3176A6','Militaire':'#8b5cf6','military':'#8b5cf6' };
 
@@ -2295,16 +2298,31 @@ function Absences() {
   return (
     <div style={{ flex:1, overflowY:'auto', paddingBottom: w < 768 ? 68 : 0 }}>
       <Topbar title="Gestion des absences" sub="Congés · Maladie · Accidents · APG"
-        actions={<button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowNew(true)}>+ Nouvelle</button>}/>
+        actions={<>
+          <button className={`btn ${view === 'list' ? 'btn-p' : 'btn-g'}`} style={{ fontSize:11 }} onClick={() => setView('list')}>📋 Liste</button>
+          <button className={`btn ${view === 'calendar' ? 'btn-p' : 'btn-g'}`} style={{ fontSize:11 }} onClick={() => setView('calendar')}>📅 Calendrier</button>
+          <button className="btn btn-p" style={{ fontSize:11 }} onClick={() => setShowNew(true)}>+ Nouvelle</button>
+        </>}/>
       <div style={{ padding:p, display:'flex', flexDirection:'column', gap:14 }}>
 
-        <div className="tabs">
-          {[['all','Tout'],[`pending`,`En attente (${pending.length})`],['approved','Approuvé'],['rejected','Refusé']].map(([v, l]) => (
-            <button key={v} className={`tab${f === v ? ' on' : ''}`} onClick={() => setF(v)}>{l}</button>
-          ))}
-        </div>
+        {view === 'list' && (
+          <div className="tabs">
+            {[['all','Tout'],[`pending`,`En attente (${pending.length})`],['approved','Approuvé'],['rejected','Refusé']].map(([v, l]) => (
+              <button key={v} className={`tab${f === v ? ' on' : ''}`} onClick={() => setF(v)}>{l}</button>
+            ))}
+          </div>
+        )}
 
-        <ApiState loading={loading} error={error}>
+        {view === 'calendar' && (
+          <AbsenceCalendar
+            absences={all}
+            year={calYear}
+            month={calMonth}
+            onMonthChange={(y, m) => { setCalYear(y); setCalMonth(m); }}
+          />
+        )}
+
+        {view === 'list' && <ApiState loading={loading} error={error}>
           <div className="gabs">
             <div className="card stg">
               {list.length === 0 ? (
@@ -2356,7 +2374,7 @@ function Absences() {
               </div>
             </div>
           </div>
-        </ApiState>
+        </ApiState>}
       </div>
 
       {showNew && <NewAbsenceModal
@@ -2364,6 +2382,310 @@ function Absences() {
         onClose={() => setShowNew(false)}
         onSaved={() => { setShowNew(false); reload(); }}
       />}
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   CALENDRIER ABSENCES — Vue mois grille + Vue équipe
+══════════════════════════════════════════════════════════ */
+
+const ABS_COLORS: Record<string, string> = {
+  vacation:    '#10b981',
+  illness:     '#ef4444',
+  accident_np: '#f59e0b',
+  accident_p:  '#dc2626',
+  family:      '#3176A6',
+  military:    '#8b5cf6',
+  other:       '#6b7280',
+};
+const ABS_LABELS: Record<string, string> = {
+  vacation:    'Vacances',
+  illness:     'Maladie',
+  accident_np: 'Acc. NP',
+  accident_p:  'Acc. P',
+  family:      'Famille',
+  military:    'Militaire',
+  other:       'Autre',
+};
+
+function AbsenceCalendar({ absences, year, month, onMonthChange }: {
+  absences: any[];
+  year: number;
+  month: number;
+  onMonthChange: (y: number, m: number) => void;
+}) {
+  const [viewMode, setViewMode] = useState<'grid'|'team'>('grid');
+  const [tooltip, setTooltip]   = useState<any>(null);
+
+  // Days in month
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  // weekday of day 1 (0=Sun → shift to Mon)
+  const firstDow = new Date(year, month - 1, 1).getDay();
+  const MON_OFFSET = (firstDow === 0 ? 6 : firstDow - 1); // Mon=0…Sun=6
+
+  // Filter absences for this month/year
+  const monthAbsences = absences.filter(a => {
+    const s = new Date(a.start_date);
+    const e = new Date(a.end_date);
+    const mStart = new Date(year, month - 1, 1);
+    const mEnd   = new Date(year, month, 0);
+    return s <= mEnd && e >= mStart && a.status !== 'rejected' && a.status !== 'cancelled';
+  });
+
+  // Map: empKey → absence list
+  const byEmp = new Map<string, { name: string; absences: any[] }>();
+  for (const a of monthAbsences) {
+    const key = `${a.first_name} ${a.last_name}`;
+    if (!byEmp.has(key)) byEmp.set(key, { name: key, absences: [] });
+    byEmp.get(key)!.absences.push(a);
+  }
+  const employees = Array.from(byEmp.values()).sort((a,b) => a.name.localeCompare(b.name));
+
+  // Check if a day is covered by an absence
+  const getDayAbsence = (emp: any, day: number) => {
+    const d = new Date(year, month - 1, day);
+    return emp.absences.find((a: any) => {
+      const s = new Date(a.start_date);
+      const e = new Date(a.end_date);
+      s.setHours(0,0,0,0); e.setHours(23,59,59,999);
+      return d >= s && d <= e;
+    });
+  };
+
+  // Prev/next month
+  const prevMonth = () => { const d = new Date(year, month - 2, 1); onMonthChange(d.getFullYear(), d.getMonth() + 1); };
+  const nextMonth = () => { const d = new Date(year, month, 1);     onMonthChange(d.getFullYear(), d.getMonth() + 1); };
+  const isWeekend = (day: number) => { const dow = new Date(year, month - 1, day).getDay(); return dow === 0 || dow === 6; };
+  const isToday   = (day: number) => {
+    const t = new Date();
+    return t.getFullYear() === year && t.getMonth() + 1 === month && t.getDate() === day;
+  };
+
+  const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const DAY_LABELS  = ['L','M','M','J','V','S','D'];
+
+  // ── Légende ──────────────────────────────────────────
+  const usedTypes = [...new Set(monthAbsences.map(a => a.absence_type))];
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+      {/* Header: nav + view toggle */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+        <button className="btn btn-g" style={{ padding:'6px 12px', fontSize:13 }} onClick={prevMonth}>‹</button>
+        <div style={{ fontWeight:800, fontSize:15, minWidth:160, textAlign:'center' }}>
+          {MONTH_NAMES[month - 1]} {year}
+        </div>
+        <button className="btn btn-g" style={{ padding:'6px 12px', fontSize:13 }} onClick={nextMonth}>›</button>
+        <div style={{ marginLeft:'auto', display:'flex', gap:4 }}>
+          {[['grid','📅 Grille'],['team','👥 Équipe']].map(([v,l]) => (
+            <button key={v} className={`btn ${viewMode === v ? 'btn-p' : 'btn-g'}`}
+              style={{ fontSize:11 }} onClick={() => setViewMode(v as any)}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Légende types */}
+      {usedTypes.length > 0 && (
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {usedTypes.map(t => (
+            <span key={t} style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, color:'var(--tm)', fontWeight:600 }}>
+              <span style={{ width:10, height:10, borderRadius:2, background:ABS_COLORS[t]||'#999', display:'inline-block' }}/>
+              {ABS_LABELS[t]||t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ── Vue GRILLE ─────────────────────────────────── */}
+      {viewMode === 'grid' && (
+        <div className="card" style={{ overflowX:'auto' }}>
+          {employees.length === 0 ? (
+            <div style={{ padding:40, textAlign:'center', color:'var(--tm)', fontSize:13 }}>
+              Aucune absence pour {MONTH_NAMES[month-1]} {year}
+            </div>
+          ) : (
+            <div style={{ minWidth: Math.max(700, daysInMonth * 30 + 150) }}>
+              {/* Header jours */}
+              <div style={{ display:'grid',
+                gridTemplateColumns: `160px repeat(${daysInMonth}, 1fr)`,
+                gap:1, background:'var(--b1)', borderRadius:'var(--r) var(--r) 0 0', overflow:'hidden' }}>
+                <div style={{ background:'var(--surf2)', padding:'8px 10px', fontSize:10, fontWeight:700, color:'var(--tm)', display:'flex', alignItems:'center' }}>
+                  Collaborateur
+                </div>
+                {days.map(d => (
+                  <div key={d} style={{
+                    background: isToday(d) ? 'var(--blued)' : isWeekend(d) ? 'var(--surf2)' : 'var(--surf)',
+                    padding:'4px 2px', textAlign:'center',
+                    borderLeft:'1px solid var(--b1)',
+                  }}>
+                    <div style={{ fontSize:8, color:'var(--tm)', fontWeight:600 }}>
+                      {DAY_LABELS[new Date(year, month-1, d).getDay() === 0 ? 6 : new Date(year, month-1, d).getDay() - 1]}
+                    </div>
+                    <div style={{ fontSize:10, fontWeight: isToday(d) ? 900 : 700, color: isToday(d) ? 'var(--blue)' : isWeekend(d) ? 'var(--tm)' : 'var(--txt)' }}>
+                      {d}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rows par employé */}
+              {employees.map((emp, ei) => (
+                <div key={emp.name} style={{ display:'grid',
+                  gridTemplateColumns: `160px repeat(${daysInMonth}, 1fr)`,
+                  gap:1, background:'var(--b1)', borderTop:'1px solid var(--b1)' }}>
+                  {/* Nom employé */}
+                  <div style={{ background:'var(--surf)', padding:'6px 10px', display:'flex', alignItems:'center' }}>
+                    <span style={{ fontSize:11, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                      {emp.name}
+                    </span>
+                  </div>
+                  {/* Jours */}
+                  {days.map(d => {
+                    const abs = getDayAbsence(emp, d);
+                    const col = abs ? (ABS_COLORS[abs.absence_type] || '#999') : null;
+                    const wknd = isWeekend(d);
+                    return (
+                      <div key={d}
+                        title={abs ? `${ABS_LABELS[abs.absence_type]||abs.absence_type} · ${abs.status}` : undefined}
+                        onMouseEnter={abs ? (e) => setTooltip({ abs, x: e.clientX, y: e.clientY }) : () => setTooltip(null)}
+                        onMouseLeave={() => setTooltip(null)}
+                        style={{
+                          background: col
+                            ? (abs.status === 'pending' ? col + '66' : col + 'cc')
+                            : wknd ? 'var(--surf2)' : 'var(--surf)',
+                          borderLeft: '1px solid var(--b1)',
+                          minHeight: 28,
+                          cursor: abs ? 'pointer' : 'default',
+                          position: 'relative',
+                          transition: 'filter .1s',
+                        }}
+                      >
+                        {abs && abs.status === 'pending' && (
+                          <div style={{ position:'absolute', top:2, right:2, width:5, height:5, borderRadius:'50%', background: col, border:'1px solid white', opacity:.8 }}/>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Vue ÉQUIPE ─────────────────────────────────── */}
+      {viewMode === 'team' && (
+        <div className="card" style={{ overflowX:'auto' }}>
+          <div style={{ minWidth: Math.max(700, daysInMonth * 34 + 60) }}>
+            {/* Header jours */}
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${daysInMonth}, 1fr)`,
+              gap:1, background:'var(--b1)', borderRadius:'var(--r) var(--r) 0 0', overflow:'hidden' }}>
+              {days.map(d => (
+                <div key={d} style={{
+                  background: isToday(d) ? 'var(--blued)' : isWeekend(d) ? 'var(--surf2)' : 'var(--surf)',
+                  padding:'5px 2px', textAlign:'center',
+                  borderLeft: d > 1 ? '1px solid var(--b1)' : undefined,
+                }}>
+                  <div style={{ fontSize:8, color:'var(--tm)', fontWeight:600 }}>
+                    {DAY_LABELS[new Date(year, month-1, d).getDay() === 0 ? 6 : new Date(year, month-1, d).getDay() - 1]}
+                  </div>
+                  <div style={{ fontSize:10, fontWeight: isToday(d) ? 900 : 700, color: isToday(d) ? 'var(--blue)' : isWeekend(d) ? 'var(--tm)' : 'var(--txt)' }}>
+                    {d}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Colonnes jours — empilées par absents */}
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${daysInMonth}, 1fr)`,
+              gap:1, background:'var(--b1)', minHeight:80 }}>
+              {days.map(d => {
+                const absentThisDay = employees.filter(emp => getDayAbsence(emp, d));
+                const wknd = isWeekend(d);
+                return (
+                  <div key={d} style={{
+                    background: wknd ? 'var(--surf2)' : 'var(--surf)',
+                    borderLeft: d > 1 ? '1px solid var(--b1)' : undefined,
+                    display:'flex', flexDirection:'column', gap:2, padding:'3px 2px', minHeight:60,
+                  }}>
+                    {absentThisDay.map(emp => {
+                      const abs = getDayAbsence(emp, d)!;
+                      const col = ABS_COLORS[abs.absence_type] || '#999';
+                      const initials = emp.name.split(' ').map((n:string) => n[0]).join('').slice(0,2).toUpperCase();
+                      return (
+                        <div key={emp.name}
+                          title={`${emp.name} — ${ABS_LABELS[abs.absence_type]||abs.absence_type}`}
+                          onMouseEnter={e => setTooltip({ abs: { ...abs, empName: emp.name }, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
+                          style={{
+                            background: col + (abs.status === 'pending' ? '55' : 'cc'),
+                            borderRadius:3, padding:'1px 3px',
+                            fontSize:8, fontWeight:800, color:'white',
+                            textAlign:'center', cursor:'pointer',
+                            lineHeight:'14px', minHeight:14,
+                            overflow:'hidden',
+                          }}>
+                          {initials}
+                        </div>
+                      );
+                    })}
+                    {absentThisDay.length > 0 && (
+                      <div style={{ fontSize:8, color:'var(--tm)', textAlign:'center', marginTop:'auto' }}>
+                        {absentThisDay.length}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Légende employés */}
+            <div style={{ padding:'10px 12px', background:'var(--surf2)', borderTop:'1px solid var(--b1)',
+              display:'flex', flexWrap:'wrap', gap:8, borderRadius:'0 0 var(--r) var(--r)' }}>
+              {employees.map(emp => {
+                const col = ABS_COLORS[emp.absences[0]?.absence_type] || '#999';
+                const initials = emp.name.split(' ').map((n:string) => n[0]).join('').slice(0,2).toUpperCase();
+                return (
+                  <span key={emp.name} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'var(--txt)', fontWeight:600 }}>
+                    <span style={{ width:14, height:14, borderRadius:3, background:col+'cc', display:'flex', alignItems:'center', justifyContent:'center', fontSize:7, fontWeight:900, color:'white' }}>
+                      {initials}
+                    </span>
+                    {emp.name}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tooltip flottant */}
+      {tooltip && (
+        <div style={{
+          position:'fixed', zIndex:9999,
+          left: Math.min(tooltip.x + 10, window.innerWidth - 200),
+          top:  tooltip.y - 80,
+          background:'var(--surf)', border:'1px solid var(--b2)',
+          borderRadius:8, padding:'10px 14px', boxShadow:'0 4px 16px rgba(0,0,0,.12)',
+          pointerEvents:'none', minWidth:160,
+        }}>
+          {tooltip.abs.empName && <div style={{ fontWeight:700, fontSize:12, marginBottom:4 }}>{tooltip.abs.empName}</div>}
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+            <span style={{ width:8, height:8, borderRadius:2, background:ABS_COLORS[tooltip.abs.absence_type]||'#999', display:'inline-block' }}/>
+            <span style={{ fontSize:12, fontWeight:700 }}>{ABS_LABELS[tooltip.abs.absence_type]||tooltip.abs.absence_type}</span>
+          </div>
+          <div style={{ fontSize:11, color:'var(--tm)' }}>
+            {new Date(tooltip.abs.start_date).toLocaleDateString('fr-CH')} → {new Date(tooltip.abs.end_date).toLocaleDateString('fr-CH')}
+          </div>
+          <div style={{ fontSize:11, color:'var(--tm)' }}>{tooltip.abs.working_days}j · <span style={{ fontWeight:600, color: tooltip.abs.status === 'approved' ? '#10b981' : tooltip.abs.status === 'pending' ? '#f59e0b' : '#ef4444' }}>{tooltip.abs.status}</span></div>
+          {tooltip.abs.reason && <div style={{ fontSize:10, color:'var(--tm)', marginTop:3 }}>{tooltip.abs.reason}</div>}
+        </div>
+      )}
     </div>
   );
 }
