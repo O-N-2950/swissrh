@@ -583,3 +583,52 @@ export function workingDaysInMonth(
   }
   return count;
 }
+
+/**
+ * getHolidaysForCanton — retourne les jours fériés d'un canton pour une année
+ * Utilisé dans absences.ts pour calculer les jours ouvrables
+ */
+export function getHolidaysForCanton(canton: string, year: number): { date: string; name: string }[] {
+  const ch = (m: number, d: number, name: string) => ({
+    date: `${year}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+    name,
+  });
+  // Calcul Pâques (algorithme de Butcher)
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d2 = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g2 = Math.floor((b-f+1)/3), h = (19*a+b-d2-g2+15) % 30;
+  const i2 = Math.floor(c/4), k = c % 4;
+  const l = (32+2*e+2*i2-h-k) % 7;
+  const m2 = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*m2+114)/31);
+  const day   = ((h+l-7*m2+114) % 31) + 1;
+  const easter = new Date(year, month-1, day);
+  const easterFmt = (offset: number) => {
+    const d3 = new Date(easter); d3.setDate(d3.getDate() + offset);
+    return `${year}-${String(d3.getMonth()+1).padStart(2,'0')}-${String(d3.getDate()).padStart(2,'0')}`;
+  };
+
+  // Fériés nationaux
+  const national = [
+    ch(1,1,'Nouvel an'), ch(8,1,'Fête nationale'),
+    { date: easterFmt(-2), name: 'Vendredi saint' },
+    { date: easterFmt(1),  name: 'Lundi de Pâques' },
+    { date: easterFmt(39), name: 'Ascension' },
+    { date: easterFmt(50), name: 'Lundi de Pentecôte' },
+    ch(12,25,'Noël'), ch(12,26,'St-Étienne / 2e jour Noël'),
+  ];
+  // Fériés cantonaux
+  const cantonal: Record<string, ReturnType<typeof ch>[]> = {
+    JU: [ch(1,2,'2e janvier'), ch(3,19,'St-Joseph'), ch(5,1,'Fête du Travail'), ch(6,23,'Fête-Dieu'), ch(8,15,'Assomption'), ch(11,1,'Toussaint'), ch(12,8,'Immaculée Conception')],
+    BE: [ch(1,2,'2e janvier')],
+    FR: [ch(1,2,'2e janvier'), ch(3,19,'St-Joseph'), ch(5,1,'Fête du Travail'), ch(8,15,'Assomption'), ch(11,1,'Toussaint'), ch(12,8,'Immaculée Conception')],
+    GE: [ch(12,31,'Restauration de la République')],
+    VD: [ch(1,2,'Berchtoldstag')],
+    VS: [ch(3,19,'St-Joseph'), ch(8,15,'Assomption'), ch(11,1,'Toussaint'), ch(12,8,'Immaculée Conception')],
+    NE: [ch(3,1,'Fête de la République')],
+    ZH: [ch(1,2,'Berchtoldstag'), ch(5,1,'Tag der Arbeit')],
+    BS: [ch(1,2,'Berchtoldstag'), ch(5,1,'Tag der Arbeit')],
+    SG: [ch(1,2,'Berchtoldstag')],
+  };
+  return [...national, ...(cantonal[canton.toUpperCase()] || [])];
+}
