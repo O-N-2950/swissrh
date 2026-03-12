@@ -18,11 +18,14 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 const _secret = JWT_SECRET || 'swissrh-dev-secret-CHANGE-IN-PROD-min-32-chars';
 
 export interface JwtPayload {
-  userId:      number;
-  email:       string;
-  role:        'admin' | 'rh_manager' | 'employee';
-  companyId:   number;
-  employeeId?: number; // pour role=employee → son propre ID employé
+  userId:              number;
+  email:               string;
+  role:                'admin' | 'rh_manager' | 'employee' | 'fiduciaire';
+  companyId:           number;
+  employeeId?:         number;   // pour role=employee → son propre ID employé
+  tenantId?:           number;   // pour fiduciaires — ID du mandat
+  isFiduciaire?:       boolean;  // true quand fiduciaire switché sur client
+  originalCompanyId?:  number;   // companyId d'origine avant switch
 }
 
 export function signToken(payload: JwtPayload): string {
@@ -86,3 +89,4 @@ export function canAccessEmployee(requester: JwtPayload, targetEmployeeId: numbe
   if (requester.role === 'admin' || requester.role === 'rh_manager') return true;
   return requester.employeeId === targetEmployeeId;
 }
+
