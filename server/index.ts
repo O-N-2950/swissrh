@@ -109,6 +109,8 @@ app.use('/api/expenses',   requireAuth, expensesRouter);
 app.use('/api/ai',         requireAuth, aiRouter);
 app.use('/api/billing',    billingRouter);
 app.use('/api/swissdec',   requireAuth, swissdec5Router);
+app.use('/api/v1',         publicApiRouter);
+app.use('/api/keys',       requireAuth, apiKeysRouter);
 app.use('/api/auth',       ssoRouter);                   // SSO WinWin (public — vérifie transfer token)
 
 // ===== STATIC (production) =====
@@ -164,6 +166,7 @@ async function start() {
   await migrateMultiTenant();
   await migrateSprint3();
   await migrateBilling();
+  await migrateSprint5();
   await migrateSprint5();
       console.log('✅ Migrations OK');
     } catch (e: any) {
